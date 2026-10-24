@@ -4,7 +4,7 @@ An evolving collection of small digital art studies, exhibited together on one p
 
 ## 001 — Koi
 
-A top-down ASCII pond rendered on a canvas. Each koi has a curved spine, articulated fins and tail, and its own swimming temperament. Includes procedural water, pointer ripples, responsive rendering, pause/resume, and reduced-motion support.
+A top-down ASCII pond rendered on a canvas, with larger, densely detailed koi, curved spines, articulated fins and tails, and individual swimming temperaments. Drag to orbit and tilt, use the wheel or pinch to zoom, and click to make ripples. Use **Reset view**, double-click, or **R** to reset; arrow keys orbit and tilt, while **+/-** zoom. Includes procedural water, responsive rendering, pause/resume, and reduced-motion support.
 
 ## Run locally
 

@@ -35,16 +35,25 @@
 
     <footer class="site-footer">
       <p class="medium-note">Characters become creatures.</p>
-      <div class="exhibit-status">
-        <span class="live-dot" aria-hidden="true"></span>
-        <span>Generative study</span>
-        <span class="status-divider" aria-hidden="true">/</span>
-        <span>Top view</span>
+      <div class="view-details">
+        <div class="exhibit-status">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span>Generative study</span>
+          <span class="status-divider" aria-hidden="true">/</span>
+          <span>Top view</span>
+        </div>
+        <p class="orbit-hint">Drag to orbit · Scroll / pinch to zoom</p>
       </div>
-      <button id="motion-toggle" type="button" aria-pressed="false">
-        <span class="control-icon" aria-hidden="true">Ⅱ</span>
-        <span class="control-label">Pause motion</span>
-      </button>
+      <div class="view-controls">
+        <button id="view-reset" type="button">
+          <span class="control-icon reset-icon" aria-hidden="true">↺</span>
+          <span class="control-label">Reset view</span>
+        </button>
+        <button id="motion-toggle" type="button">
+          <span class="control-icon" aria-hidden="true">Ⅱ</span>
+          <span class="control-label">Pause motion</span>
+        </button>
+      </div>
     </footer>
 
     <noscript>
