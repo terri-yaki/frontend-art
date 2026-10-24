@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f3ec" />
+    <meta
+      name="description"
+      content="Frontend Art — an evolving collection of digital studies. First exhibit: a living ASCII koi pond."
+    />
+    <title>Koi — Frontend Art</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23f6f3ec'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='42' fill='%23c96342'%3E*%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <canvas id="pond" aria-hidden="true"></canvas>
+    <div class="water-shade" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="wordmark" href="./" aria-label="Frontend Art home">
+        <span>frontend</span><span class="wordmark-slash">/</span><span>art</span>
+      </a>
+      <p class="collection-note">An evolving collection<br />of digital studies</p>
+      <p class="edition">Vol. 01 <span aria-hidden="true">↗</span> 2026</p>
+    </header>
+
+    <main id="exhibit">
+      <section class="exhibit-caption" aria-labelledby="exhibit-title">
+        <p class="eyebrow"><span>001</span> ASCII animation</p>
+        <h1 id="exhibit-title">Koi<span class="title-mark" aria-hidden="true">*</span></h1>
+        <p class="exhibit-description">A quiet choreography<br />of code and current.</p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="medium-note">Characters become creatures.</p>
+      <div class="exhibit-status">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span>Generative study</span>
+        <span class="status-divider" aria-hidden="true">/</span>
+        <span>Top view</span>
+      </div>
+      <button id="motion-toggle" type="button" aria-pressed="false">
+        <span class="control-icon" aria-hidden="true">Ⅱ</span>
+        <span class="control-label">Pause motion</span>
+      </button>
+    </footer>
+
+    <noscript>
+      <p class="noscript-note">Enable JavaScript to let the koi swim.</p>
+    </noscript>
+  </body>
+</html>
