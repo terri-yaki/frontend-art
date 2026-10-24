@@ -168,9 +168,32 @@
       this.y = 0;
       this.heading = 0;
       this.turn = 0;
+      this.vx = 0;
+      this.vy = 0;
+      this.speed = 0;
+      this.previousSpeed = 0;
+      this.acceleration = 0;
       this.scale = 0.90 + random() * 0.22;
-      this.speed = 15 + random() * 8;
+      this.temperament = {
+        energy: 0.75 + random() * 0.50,
+        curiosity: 0.65 + random() * 0.70,
+        sociability: 0.60 + random() * 0.70,
+        reaction: 0.75 + random() * 0.50,
+        agility: 0.85 + random() * 0.30
+      };
+      this.state = 'cruise';
+      this.stateTimer = 0;
+      this.baseSpeed = 15 + this.temperament.energy * 5;
+      this.targetSpeed = this.baseSpeed;
+      this.accelerationLimit = 24;
+      this.turnLimit = 1.15;
+      this.targetTurn = 0;
       this.phase = random() * TAU;
+      this.tailPhase = this.phase;
+      this.tailFrequency = 0;
+      this.tailAmplitude = 0;
+      this.finBrake = 0;
+      this.bank = 0;
       this.wanderSpeed = 0.30 + random() * 0.28;
       this.pattern = index * 3 + Math.floor(random() * 3);
       this.palette = PALETTES[index % PALETTES.length];
@@ -179,6 +202,71 @@
       this.count = 0;
       this.bodyLength = 155;
       this.tailLength = 45;
+      enterBehavior(this, 'cruise');
+    }
+
+    function updateBehaviorDrive(fish) {
+      const energy = fish.temperament.energy;
+      const agility = fish.temperament.agility;
+      if (fish.state === 'dart') {
+        fish.targetSpeed = fish.baseSpeed * (2.35 + energy * 0.20);
+        fish.accelerationLimit = 42 * agility;
+        fish.turnLimit = 1.45 * agility;
+      } else if (fish.state === 'brake') {
+        fish.targetSpeed = fish.baseSpeed * 0.22;
+        fish.accelerationLimit = 32 * agility;
+        fish.turnLimit = 0.90 * agility;
+      } else if (fish.state === 'rest') {
+        fish.targetSpeed = 0.15;
+        fish.accelerationLimit = 18 * agility;
+        fish.turnLimit = 0.35 * agility;
+      } else {
+        fish.targetSpeed = fish.baseSpeed * (fish.state === 'curiosity' ? 0.72 : 1);
+        fish.accelerationLimit = 24 * agility;
+        fish.turnLimit = 1.15 * agility;
+      }
+    }
+
+    function enterBehavior(fish, state) {
+      fish.state = state;
+      if (state === 'dart') fish.stateTimer = 0.45 + random() * 0.55;
+      else if (state === 'brake') fish.stateTimer = 0.80 + random() * 0.90;
+      else if (state === 'rest') fish.stateTimer = 2.0 + random() * 2.80;
+      else if (state === 'curiosity') fish.stateTimer = 2.0 + random() * 2.50;
+      else fish.stateTimer = 4.0 + random() * 4.0 / fish.temperament.energy;
+      updateBehaviorDrive(fish);
+    }
+
+    function advanceBehavior(fish) {
+      const choice = random();
+      if (fish.state === 'dart') {
+        enterBehavior(fish, 'brake');
+      } else if (fish.state === 'brake') {
+        enterBehavior(fish, choice < 0.25 ? 'rest' : (choice < 0.45 ? 'curiosity' : 'cruise'));
+      } else if (fish.state === 'rest') {
+        enterBehavior(fish, choice < 0.30 ? 'curiosity' : 'cruise');
+      } else if (fish.state === 'curiosity') {
+        enterBehavior(fish, choice < 0.18 ? 'dart' : (choice < 0.38 ? 'brake' : 'cruise'));
+      } else {
+        const next = choice < 0.18 ? 'dart'
+          : (choice < 0.34 ? 'curiosity' : (choice < 0.44 ? 'brake' : (choice < 0.54 ? 'rest' : 'cruise')));
+        enterBehavior(fish, next);
+      }
+    }
+
+    function updateSwimMechanics(fish, dt) {
+      const speed = fish.speed;
+      fish.tailFrequency = speed < 0.05 ? 0 : 0.45 + speed * 0.085;
+      const targetAmplitude = 0.08 + clamp(speed / (fish.baseSpeed * 2.2), 0, 1) * 1.05;
+      const blend = dt > 0 ? 1 - Math.exp(-dt * 10) : 0;
+      fish.tailAmplitude += (targetAmplitude - fish.tailAmplitude) * blend;
+      fish.tailPhase += fish.tailFrequency * TAU * dt;
+      fish.acceleration = dt > 0 ? (speed - fish.previousSpeed) / dt : 0;
+      const braking = clamp(-fish.acceleration / 28, 0, 1);
+      fish.finBrake += (braking - fish.finBrake) * blend;
+      const bank = clamp(fish.turn * speed / 55, -1, 1);
+      fish.bank += (bank - fish.bank) * blend;
+      fish.previousSpeed = speed;
     }
 
     function initializeFish(fish, x, y, heading) {
@@ -186,6 +274,11 @@
       fish.y = y;
       fish.heading = heading;
       fish.turn = 0;
+      if (fish.speed <= 0 && fish.state !== 'rest') fish.speed = fish.targetSpeed * 0.65;
+      fish.vx = Math.cos(heading) * fish.speed;
+      fish.vy = Math.sin(heading) * fish.speed;
+      fish.previousSpeed = fish.speed;
+      updateSwimMechanics(fish, 0);
       fish.bodyLength = cellW * 30.5 * fish.scale;
       fish.tailLength = cellW * 9.0 * fish.scale;
       const totalLength = fish.bodyLength + fish.tailLength;
@@ -532,7 +625,7 @@
       const normalLength = Math.hypot(across, vertical);
       sample.x = center.x + normalX * edge * halfWidth;
       sample.y = center.y + normalY * edge * halfWidth;
-      sample.z = thickness * (0.16 + cross * 0.84);
+      sample.z = thickness * (0.16 + cross * 0.84) + fish.bank * edge * halfWidth * 0.22;
       sample.nx = normalX * across / normalLength;
       sample.ny = normalY * across / normalLength;
       sample.nz = vertical / normalLength;
@@ -560,7 +653,7 @@
     }
 
     function drawTail(fish) {
-      const wag = Math.sin(elapsed * 3.1 + fish.phase) * 1.05;
+      const wag = Math.sin(fish.tailPhase) * fish.tailAmplitude * 1.05;
       const steps = Math.ceil(fish.tailLength / Math.max(1, cellW * 0.26));
       for (let step = 0; step <= steps; step++) {
         const progress = step / steps;
@@ -584,7 +677,7 @@
             if (Math.abs(along) > Math.max(cellW, cellH) * 0.55) continue;
             if (distanceFromCenter > halfWidth || distanceFromCenter < notch) continue;
             const edge = distanceFromCenter / Math.max(1, halfWidth);
-            const z = (0.35 + (1 - progress) * 1.65 + (1 - edge) * 0.55) * cellH * fish.scale;
+            const z = (0.35 + (1 - progress) * 1.65 + (1 - edge) * 0.55) * cellH * fish.scale + fish.bank * lateral * 0.18;
             project(worldColumn * cellW, worldRow * cellH, z, screenPoint);
             const column = Math.round(screenPoint.x / cellW);
             const row = Math.round(screenPoint.y / cellH);
@@ -602,7 +695,7 @@
     }
 
     function drawFins(fish) {
-      const beat = Math.sin(elapsed * 3.7 + fish.phase);
+      const beat = Math.sin(fish.tailPhase * 0.73 + fish.phase) * (1 - fish.finBrake * 0.65);
       for (let pair = 0; pair < 2; pair++) {
         const progress = pair === 0 ? 0.34 : 0.63;
         const distance = fish.bodyLength * progress;
@@ -613,7 +706,7 @@
         const normalY = Math.cos(point.a);
         const rootWidth = bodyWidth(progress) * cellW * fish.scale;
         for (let side = -1; side <= 1; side += 2) {
-          const reach = (pair === 0 ? 6.0 : 4.60) + beat * side * 0.28;
+          const reach = (pair === 0 ? 6.0 : 4.60) + fish.finBrake * (pair === 0 ? 2.40 : 1.40) + beat * side * 0.28;
           for (let t = 0; t <= 1.001; t += 0.05) {
             const spread = side * (rootWidth * 0.62 + t * reach * cellW * fish.scale);
             const sweepCenter = t * (pair === 0 ? 3.0 : 2.30) * cellW;
@@ -622,7 +715,7 @@
               const along = sweepCenter + sweep;
               const x = point.x + normalX * spread + forwardX * along;
               const y = point.y + normalY * spread + forwardY * along;
-              const z = (1.15 + bodyWidth(progress) * 0.26 + Math.sin(t * Math.PI * 0.72) * 1.55 + beat * side * t * 0.42) * cellH * fish.scale;
+              const z = (1.15 + bodyWidth(progress) * 0.26 + Math.sin(t * Math.PI * 0.72) * 1.55 + beat * side * t * 0.42 + fish.bank * side * t * 0.65) * cellH * fish.scale;
               project(x, y, z, screenPoint);
               const column = Math.round(screenPoint.x / cellW);
               const row = Math.round(screenPoint.y / cellH);
@@ -823,8 +916,12 @@
     }
 
     function steer(fish, dt) {
-      let targetTurn = Math.sin(elapsed * fish.wanderSpeed + fish.phase) * 0.24;
-      targetTurn += Math.sin(elapsed * 0.17 + fish.phase * 2.1) * 0.12;
+      fish.stateTimer = Math.max(0, fish.stateTimer - dt);
+      if (dt > 0 && fish.stateTimer === 0) advanceBehavior(fish);
+      updateBehaviorDrive(fish);
+      const wandering = fish.state === 'dart' ? 0.20 : (fish.state === 'rest' ? 0.15 : 1);
+      let targetTurn = Math.sin(elapsed * fish.wanderSpeed + fish.phase) * 0.24 * wandering;
+      targetTurn += Math.sin(elapsed * 0.17 + fish.phase * 2.1) * 0.12 * wandering;
       const totalLength = fish.bodyLength + fish.tailLength;
       const avoid = { x: 0, y: 0 };
       for (let i = 0; i <= 10; i++) {
@@ -841,34 +938,76 @@
         avoid
       );
 
+      let alignmentX = 0;
+      let alignmentY = 0;
+      let cohesionX = 0;
+      let cohesionY = 0;
+      let neighbors = 0;
+      let nearest = null;
+      let nearestDistance = Infinity;
       for (let i = 0; i < fishes.length; i++) {
         const other = fishes[i];
         if (other === fish) continue;
         const dx = fish.x - other.x;
         const dy = fish.y - other.y;
         const distanceSquared = dx * dx + dy * dy;
-        const range = (totalLength + other.bodyLength + other.tailLength) * 0.62;
-        if (distanceSquared > 1 && distanceSquared < range * range) {
+        const otherLength = other.bodyLength + other.tailLength;
+        const range = (totalLength + otherLength) * 0.62;
+        const perception = (totalLength + otherLength) * 1.45;
+        if (distanceSquared > 1 && distanceSquared < perception * perception) {
           const distance = Math.sqrt(distanceSquared);
-          const force = (1 - distance / range) * 2.8;
-          avoid.x += dx / distance * force;
-          avoid.y += dy / distance * force;
+          if (distance < nearestDistance) {
+            nearest = other;
+            nearestDistance = distance;
+          }
+          if (distanceSquared < range * range) {
+            const force = (1 - distance / range) * 2.8;
+            avoid.x += dx / distance * force;
+            avoid.y += dy / distance * force;
+          }
+          const influence = 1 - distance / perception;
+          alignmentX += Math.cos(other.heading) * influence;
+          alignmentY += Math.sin(other.heading) * influence;
+          cohesionX -= dx / distance * influence;
+          cohesionY -= dy / distance * influence;
+          neighbors++;
         }
       }
 
+      if (neighbors > 0 && fish.state !== 'dart' && fish.state !== 'rest') {
+        const schooling = fish.temperament.sociability * Math.min(1, neighbors / 3);
+        const alignment = Math.atan2(alignmentY, alignmentX);
+        const cohesion = Math.atan2(cohesionY, cohesionX);
+        targetTurn += angleDelta(alignment, fish.heading) * schooling * 0.22;
+        targetTurn += angleDelta(cohesion, fish.heading) * schooling * 0.07;
+      }
+      if (fish.state === 'curiosity' && nearest) {
+        const desired = Math.atan2(nearest.y - fish.y, nearest.x - fish.x);
+        targetTurn += angleDelta(desired, fish.heading) * fish.temperament.curiosity * 0.48;
+      }
+
+      let avoidStrength = 0;
       if (avoid.x !== 0 || avoid.y !== 0) {
         const desired = Math.atan2(avoid.y, avoid.x);
         const difference = angleDelta(desired, fish.heading);
-        const strength = Math.min(2.4, Math.sqrt(avoid.x * avoid.x + avoid.y * avoid.y));
-        targetTurn += difference * strength;
+        avoidStrength = Math.min(2.4, Math.sqrt(avoid.x * avoid.x + avoid.y * avoid.y));
+        targetTurn += difference * avoidStrength;
       }
-      targetTurn = Math.max(-1.25, Math.min(1.25, targetTurn));
-      fish.turn += (targetTurn - fish.turn) * Math.min(1, dt * 2.1);
+      fish.targetTurn = clamp(targetTurn, -fish.turnLimit, fish.turnLimit);
+      const turnBlend = 1 - Math.exp(-dt * 2.8 / fish.temperament.reaction);
+      fish.turn += (fish.targetTurn - fish.turn) * turnBlend;
+      fish.turn = clamp(fish.turn, -fish.turnLimit, fish.turnLimit);
       fish.heading += fish.turn * dt;
-      const speed = fish.speed * (0.94 + Math.sin(elapsed * 0.43 + fish.phase) * 0.08);
-      fish.x += Math.cos(fish.heading) * speed * dt;
-      fish.y += Math.sin(fish.heading) * speed * dt;
+      let desiredSpeed = fish.targetSpeed;
+      if (avoidStrength > 0.4) desiredSpeed /= 1 + (avoidStrength - 0.4) * 0.65;
+      const speedChange = clamp(desiredSpeed - fish.speed, -fish.accelerationLimit * dt, fish.accelerationLimit * dt);
+      fish.speed = Math.max(0, fish.speed + speedChange);
+      fish.vx = Math.cos(fish.heading) * fish.speed;
+      fish.vy = Math.sin(fish.heading) * fish.speed;
+      fish.x += fish.vx * dt;
+      fish.y += fish.vy * dt;
       recordPosition(fish);
+      updateSwimMechanics(fish, dt);
     }
 
     function updateButton() {
@@ -1128,6 +1267,23 @@
       get pitch() { return tilt; },
       get zoom() { return zoom; },
       get dragging() { return dragging; },
+      get fishStates() {
+        return fishes.map((fish) => ({
+          index: fish.index,
+          state: fish.state,
+          stateTimer: fish.stateTimer,
+          speed: fish.speed,
+          targetSpeed: fish.targetSpeed,
+          x: fish.x,
+          y: fish.y,
+          heading: fish.heading,
+          turn: fish.turn,
+          tailFrequency: fish.tailFrequency,
+          finBrake: fish.finBrake,
+          bank: fish.bank,
+          temperament: { ...fish.temperament }
+        }));
+      },
       get camera() {
         return {
           yaw,
