@@ -297,17 +297,57 @@
 
     function populateWater() {
       water.length = 0;
-      const count = Math.min(180, Math.floor(columns * rows / 58));
-      for (let i = 0; i < count; i++) {
+      const networks = Math.max(12, Math.min(30, Math.floor(columns * rows / 1250)));
+      for (let layerIndex = 0; layerIndex < 2; layerIndex++) {
+        const marks = [];
+        for (let network = 0; network < networks; network++) {
+          let x = random() * columns;
+          let y = random() * rows;
+          let angle = random() * TAU;
+          const length = 4 + Math.floor(random() * 5);
+          for (let segment = 0; segment < length; segment++) {
+            const choice = random();
+            marks.push({
+              x: Math.round(x) * cellW,
+              y: Math.round(y) * cellH,
+              glyph: choice < 0.56 ? '-' : (choice < 0.82 ? '~' : '.'),
+              phase: random() * TAU,
+              shade: random()
+            });
+            angle += (random() - 0.5) * 0.85;
+            x += Math.cos(angle) * 1.25;
+            y += Math.sin(angle) * 0.85;
+          }
+        }
         water.push({
+          kind: 'caustics',
+          marks,
+          phase: random() * TAU,
+          speed: 0.10 + layerIndex * 0.035,
+          driftX: layerIndex === 0 ? 1 : -1,
+          driftY: layerIndex === 0 ? 0.65 : -0.80
+        });
+      }
+
+      const marks = [];
+      const count = Math.min(150, Math.floor(columns * rows / 140));
+      for (let i = 0; i < count; i++) {
+        marks.push({
           x: Math.floor(random() * columns) * cellW,
           y: Math.floor(random() * rows) * cellH,
-          glyph: random() < 0.82 ? '.' : "'",
+          glyph: random() < 0.78 ? '.' : "'",
           phase: random() * TAU,
-          drift: 0.12 + random() * 0.25,
           shade: random()
         });
       }
+      water.push({
+        kind: 'micro-currents',
+        marks,
+        phase: random() * TAU,
+        speed: 0.22,
+        driftX: -0.75,
+        driftY: 1
+      });
     }
 
     function desiredFishCount() {
@@ -648,6 +688,32 @@
       putFish(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), '@', fish.palette[5], 1, fish, 6);
     }
 
+    function drawFishShadows(fish) {
+      const step = cellW * 0.82;
+      for (let distance = 0; distance <= fish.bodyLength; distance += step) {
+        const progress = distance / fish.bodyLength;
+        spineAt(fish, distance, point);
+        const normalX = -Math.sin(point.a);
+        const normalY = Math.cos(point.a);
+        const halfWidth = bodyWidth(progress) * cellW * fish.scale;
+        for (let lateral = -halfWidth; lateral <= halfWidth; lateral += cellW * 0.78) {
+          const edge = Math.abs(lateral) / Math.max(1, halfWidth);
+          const worldColumn = Math.round((point.x + normalX * lateral) / cellW);
+          const worldRow = Math.round((point.y + normalY * lateral) / cellH);
+          const noise = cellNoise(worldColumn, worldRow, fish);
+          if (noise < 0.30 + edge * 0.30) continue;
+          const distortion = Math.round(Math.sin(elapsed * 0.55 + fish.phase + progress * 4) * 0.65) * cellW;
+          const x = point.x + normalX * lateral + cellW * 1.5 + distortion;
+          const y = point.y + normalY * lateral + cellH * 2;
+          project(x, y, 0, screenPoint);
+          const column = Math.round(screenPoint.x / cellW);
+          const row = Math.round(screenPoint.y / cellH);
+          const alpha = 0.075 + (1 - edge) * 0.075;
+          putWater(column, row, noise < 0.76 ? '.' : ':', '#728181', alpha);
+        }
+      }
+    }
+
     function addRipple(x, y, strength) {
       if (ripples.length >= MAX_RIPPLES) ripples.shift();
       ripples.push({ x, y, age: 0, life: 2.5 + random(), strength: strength || 1 });
@@ -676,19 +742,28 @@
       }
     }
 
+    function drawWaterLayer(layer) {
+      const driftX = Math.round(Math.sin(elapsed * layer.speed + layer.phase) * 1.35) * cellW * layer.driftX;
+      const driftY = Math.round(Math.cos(elapsed * layer.speed * 0.83 + layer.phase) * 1.15) * cellH * layer.driftY;
+      for (let i = 0; i < layer.marks.length; i++) {
+        const mark = layer.marks[i];
+        const wave = Math.sin(elapsed * (layer.kind === 'caustics' ? 0.42 : 0.68) + mark.phase);
+        const x = mark.x + driftX + Math.round(Math.sin(elapsed * 0.16 + mark.phase) * 0.65) * cellW;
+        const y = mark.y + driftY + Math.round(wave * 0.55) * cellH;
+        project(x, y, 0, screenPoint);
+        let glyph = mark.glyph;
+        if (wave > 0.58) glyph = layer.kind === 'caustics' && glyph === '-' ? '~' : (glyph === '.' ? "'" : glyph);
+        const alpha = (layer.kind === 'caustics' ? 0.10 : 0.085) + mark.shade * 0.07 + wave * 0.015;
+        putWater(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), glyph, layer.kind === 'caustics' ? '#93a3a5' : '#9ba7a5', alpha);
+      }
+    }
+
     function drawWater() {
       ctx.globalAlpha = 1;
       ctx.fillStyle = background;
       ctx.fillRect(0, 0, width, height);
       clearGrid();
-      for (let i = 0; i < water.length; i++) {
-        const mote = water[i];
-        const wave = Math.sin(elapsed * mote.drift + mote.phase);
-        const x = mote.x + Math.round(Math.sin(elapsed * 0.09 + mote.phase) * 0.65) * cellW;
-        const y = mote.y + Math.round(wave * 0.22) * cellH;
-        project(x, y, 0, screenPoint);
-        putWater(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), mote.glyph, '#929da2', 0.13 + mote.shade * 0.12 + wave * 0.02);
-      }
+      for (let i = 0; i < water.length; i++) drawWaterLayer(water[i]);
     }
 
     function drawGrid() {
@@ -707,6 +782,7 @@
 
     function draw(dt) {
       drawWater();
+      for (let i = 0; i < fishes.length; i++) drawFishShadows(fishes[i]);
       drawRipples(dt || 0);
       for (let i = 0; i < fishes.length; i++) drawFish(fishes[i]);
       drawGrid();
