@@ -144,12 +144,22 @@
       return changed;
     }
 
+    function renderPausedCamera() {
+      if (!paused) return;
+      const changed = yaw !== targetYaw || tilt !== targetTilt || zoom !== targetZoom;
+      yaw = targetYaw;
+      tilt = targetTilt;
+      zoom = targetZoom;
+      if (changed) draw();
+    }
+
     function resetCamera() {
       targetYaw = 0;
       targetTilt = 0;
       targetZoom = 1;
       dragYawVelocity = 0;
       dragTiltVelocity = 0;
+      renderPausedCamera();
     }
 
     function Fish(index) {
@@ -881,11 +891,8 @@
       if (!lastTime) lastTime = now;
       const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
       lastTime = now;
-      const cameraChanged = updateCamera(dt);
-      if (paused) {
-        if (cameraChanged) draw();
-        return;
-      }
+      if (paused) return;
+      updateCamera(dt);
       elapsed += dt;
       for (let i = 0; i < fishes.length; i++) steer(fishes[i], dt);
       nextRipple -= dt;
@@ -990,6 +997,7 @@
         const second = pointers.get(ids[1]);
         const distance = Math.hypot(second.x - first.x, second.y - first.y);
         if (pinchDistance > 0) targetZoom = clamp(pinchZoom * distance / pinchDistance, MIN_ZOOM, MAX_ZOOM);
+        renderPausedCamera();
         return;
       }
       if (event.pointerId !== activePointer) return;
@@ -1009,6 +1017,7 @@
       dragYawVelocity = dragYawVelocity * 0.35 + dx * 0.008 / dt * 0.65;
       dragTiltVelocity = dragTiltVelocity * 0.35 + dy * 0.006 / dt * 0.65;
       pointer.time = event.timeStamp;
+      renderPausedCamera();
     }, { passive: false });
 
     window.addEventListener('pointerup', (event) => {
@@ -1051,6 +1060,7 @@
       event.preventDefault();
       const unit = event.deltaMode === 1 ? 16 : (event.deltaMode === 2 ? height : 1);
       targetZoom = clamp(targetZoom * Math.exp(-event.deltaY * unit * 0.001), MIN_ZOOM, MAX_ZOOM);
+      renderPausedCamera();
     }, { passive: false });
 
     window.addEventListener('dblclick', (event) => {
@@ -1070,7 +1080,10 @@
       else if (event.key === '-' || event.key === '_') targetZoom = clamp(targetZoom - 0.08, MIN_ZOOM, MAX_ZOOM);
       else if (event.key === 'r' || event.key === 'R') resetCamera();
       else handled = false;
-      if (handled) event.preventDefault();
+      if (handled) {
+        event.preventDefault();
+        renderPausedCamera();
+      }
     });
 
     if (resetButton) resetButton.addEventListener('click', resetCamera);
