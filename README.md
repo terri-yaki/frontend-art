@@ -4,7 +4,9 @@ An evolving collection of small digital art studies, exhibited together on one p
 
 ## 001 — Koi
 
-A top-down ASCII pond rendered on a canvas, with larger, densely detailed koi, curved spines, articulated fins and tails, and individual swimming temperaments. Drag to orbit and tilt, use the wheel or pinch to zoom, and click to make ripples. Use **Reset view**, double-click, or **R** to reset; arrow keys orbit and tilt, while **+/-** zoom. Includes procedural water, responsive rendering, pause/resume, and reduced-motion support.
+A top-down ASCII pond rendered on a canvas, with large block-mosaic koi, curved spines, articulated fins and forked tails, saturated markings, and individual swimming temperaments. Rounded raised bodies and heads use directional volume lighting that responds to the camera, while layered animated caustics, drifting micro-currents, click ripples, and soft distorted shadows give the water depth without obscuring the fish.
+
+Drag to orbit and tilt, use the wheel or pinch to zoom, and click to make ripples. Use **Reset view**, double-click, or **R** to reset; arrow keys orbit and tilt, while **+/-** zoom. Includes responsive rendering, pause/resume, and reduced-motion support.
 
 ## Run locally
 
