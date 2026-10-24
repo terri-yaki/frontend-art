@@ -13,12 +13,12 @@
     [0.46, 5.10], [0.62, 3.95], [0.78, 2.55], [0.91, 1.38], [1.00, 0.88]
   ];
   const PALETTES = [
-    ['#41423e', '#b9653e', '#9f4437', '#77766e', '#d8d3c8', '#252824'],
-    ['#55524b', '#bd7548', '#88463b', '#838078', '#ddd7cc', '#2c2c28'],
-    ['#353936', '#a95738', '#b14b3c', '#6f716b', '#d5d0c5', '#222622'],
-    ['#605b52', '#c07a48', '#9c5140', '#888278', '#dcd6ca', '#302f2a'],
-    ['#484943', '#ad633f', '#913d34', '#7b796f', '#d8d1c5', '#282924'],
-    ['#3d403d', '#bd7044', '#a64c3c', '#73766f', '#ded8cc', '#252825']
+    ['#292b28', '#f26a21', '#c9342c', '#77756b', '#e5c28f', '#111412'],
+    ['#39352f', '#ed7a24', '#b92f35', '#817a6e', '#dfc08d', '#171713'],
+    ['#242a27', '#e85b1b', '#d43b2f', '#6f746b', '#dfbd8c', '#101512'],
+    ['#403a31', '#f08228', '#c23a35', '#887e70', '#dfbf8b', '#191713'],
+    ['#30322c', '#e96720', '#b92828', '#79776a', '#e2bf8c', '#141612'],
+    ['#29302d', '#f17524', '#ce4032', '#74796f', '#e0bf8b', '#121614']
   ];
 
   function start() {
@@ -90,7 +90,7 @@
       return Math.max(minimum, Math.min(maximum, value));
     }
 
-    function project(x, y, out) {
+    function project(x, y, z, out) {
       if (yaw === 0 && tilt === 0 && zoom === 1) {
         out.x = x;
         out.y = y;
@@ -102,12 +102,14 @@
       const dy = y - centerY;
       const cosYaw = Math.cos(yaw);
       const sinYaw = Math.sin(yaw);
+      const cosTilt = Math.cos(tilt);
+      const sinTilt = Math.sin(tilt);
       const rotatedX = dx * cosYaw - dy * sinYaw;
       const rotatedY = dx * sinYaw + dy * cosYaw;
       const distance = Math.max(width, height) * 1.35;
-      const perspective = distance / (distance + rotatedY * Math.sin(tilt));
+      const perspective = distance / Math.max(1, distance + rotatedY * sinTilt + z * cosTilt);
       out.x = centerX + rotatedX * perspective * zoom;
-      out.y = centerY + rotatedY * Math.cos(tilt) * perspective * zoom;
+      out.y = centerY + (rotatedY * cosTilt - z * sinTilt) * perspective * zoom;
       return out;
     }
 
@@ -327,18 +329,20 @@
 
     function initialSilhouetteClear(fish, x, y, heading) {
       const margin = silhouetteMargin(fish);
+      const placementMargin = width < 600 ? Math.min(margin, cellW * 4 * fish.scale) : margin;
       const totalLength = fish.bodyLength + fish.tailLength;
       for (let i = 0; i <= 12; i++) {
         const distance = totalLength * i / 12;
         const px = x - Math.cos(heading) * distance;
         const py = y - Math.sin(heading) * distance;
-        if (reservedAt(px, py, margin)) return false;
+        if (reservedAt(px, py, placementMargin)) return false;
       }
       for (let i = 0; i < fish.index; i++) {
         const other = fishes[i];
         const dx = x - other.x;
         const dy = y - other.y;
-        const range = (totalLength + other.bodyLength + other.tailLength) * 0.40;
+        const spacing = width < 600 ? 0.24 : 0.40;
+        const range = (totalLength + other.bodyLength + other.tailLength) * spacing;
         if (dx * dx + dy * dy < range * range) return false;
       }
       return true;
@@ -379,8 +383,8 @@
       ctx.font = fontSize + 'px "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      cellW = Math.max(4, Math.round(ctx.measureText('M').width));
-      cellH = fontSize + 2;
+      cellW = Math.max(4, Math.ceil(ctx.measureText('M').width));
+      cellH = cellW;
       columns = Math.ceil(width / cellW);
       rows = Math.ceil(height / cellH);
       allocateGrid();
@@ -400,15 +404,20 @@
       const layoutRows = Math.ceil(count / layoutColumns);
       const marginX = Math.min(width * 0.15, 105);
       const marginY = Math.min(height * 0.15, 105);
-      const layoutTop = phoneLayout ? Math.min(80, height * 0.14) : marginY;
-      const layoutHeight = phoneLayout ? height * 0.54 : height - marginY * 2;
+      const layoutTop = phoneLayout ? Math.min(170, height * 0.20) : marginY;
+      const layoutHeight = phoneLayout ? height * 0.40 : height - marginY * 2;
       for (let i = 0; i < fishes.length; i++) {
+        const fish = fishes[i];
         const column = i % layoutColumns;
         const row = Math.floor(i / layoutColumns);
-        const x = marginX + (width - marginX * 2) * (column + 0.5) / layoutColumns;
+        const heading = phoneLayout ? (i % 2 ? Math.PI - 0.18 : 0.18) : random() * TAU;
+        if (phoneLayout) initializeFish(fish, 0, 0, heading);
+        const phoneMargin = Math.min(silhouetteMargin(fish), cellW * 4 * fish.scale);
+        const phoneOffset = (fish.bodyLength + fish.tailLength) * Math.cos(0.18) + phoneMargin + cellW;
+        const x = phoneLayout ? (i % 2 ? width - phoneOffset : phoneOffset)
+          : marginX + (width - marginX * 2) * (column + 0.5) / layoutColumns;
         const y = layoutTop + layoutHeight * (row + 0.5) / layoutRows;
-        const heading = phoneLayout ? (i % 2 ? Math.PI + 0.18 : -0.18) : random() * TAU;
-        placeFish(fishes[i], x, y, heading);
+        placeFish(fish, x, y, heading);
       }
       draw();
     }
@@ -441,32 +450,67 @@
       return fish.pattern % 4 === 1 ? 3 : 0;
     }
 
-    function bodyCharacter(progress, edge, noise, patch) {
-      if (edge > 0.94) return noise < 0.55 ? ':' : '.';
-      if (edge > 0.80) return noise < 0.58 ? 'o' : ':';
-      if (edge > 0.60) return noise < 0.24 ? '0' : (noise < 0.78 ? 'O' : 'o');
-      if (progress < 0.15) return noise < 0.24 ? '0' : (noise < 0.78 ? 'O' : '@');
-      if (patch === 3) return noise < 0.20 ? 'o' : (noise < 0.78 ? 'O' : '0');
-      if (patch === 1 || patch === 2) {
-        if (noise < 0.16) return '@';
-        if (noise < 0.47) return '0';
-        return noise < 0.88 ? 'O' : 'o';
-      }
-      if (noise < 0.13) return '#';
-      if (noise < 0.38) return '@';
-      if (noise < 0.61) return '0';
-      return noise < 0.90 ? 'O' : 'o';
+    function surfaceLight(nx, ny, nz) {
+      const cameraX = -0.46;
+      const cameraY = -0.34;
+      const lightX = cameraX * Math.cos(yaw) + cameraY * Math.sin(yaw);
+      const lightY = -cameraX * Math.sin(yaw) + cameraY * Math.cos(yaw);
+      return clamp(0.52 + (nx * lightX + ny * lightY) * 0.46 + nz * (0.20 + Math.cos(tilt) * 0.08), 0.35, 1);
     }
 
-    function bodyColor(fish, patch, edge) {
-      if (patch === 1) return fish.palette[1];
-      if (patch === 2) return fish.palette[2];
-      if (patch === 3) return edge > 0.66 ? fish.palette[3] : fish.palette[4];
-      return edge > 0.80 ? fish.palette[3] : fish.palette[0];
+    function shadeColor(color, light) {
+      const brightness = 0.60 + light * 0.48;
+      const red = Math.min(255, Math.round(parseInt(color.slice(1, 3), 16) * brightness));
+      const green = Math.min(255, Math.round(parseInt(color.slice(3, 5), 16) * brightness));
+      const blue = Math.min(255, Math.round(parseInt(color.slice(5, 7), 16) * brightness));
+      return `rgb(${red}, ${green}, ${blue})`;
+    }
+
+    function sampleBody(fishOrIndex, progress, lateral, spine, out) {
+      const fish = typeof fishOrIndex === 'number' ? fishes[fishOrIndex] : fishOrIndex;
+      const center = spine || spineAt(fish, fish.bodyLength * progress, point);
+      const sample = out || {};
+      const halfWidth = bodyWidth(progress) * cellW * fish.scale;
+      const edge = clamp(lateral, -1, 1);
+      const cross = Math.sqrt(Math.max(0, 1 - edge * edge));
+      const normalX = -Math.sin(center.a);
+      const normalY = Math.cos(center.a);
+      const headLift = Math.exp(-progress * 8) * 1.25;
+      const thickness = (0.55 + bodyWidth(progress) * 0.40 + headLift) * cellH * fish.scale;
+      const across = edge * 0.92;
+      const vertical = cross || 0.08;
+      const normalLength = Math.hypot(across, vertical);
+      sample.x = center.x + normalX * edge * halfWidth;
+      sample.y = center.y + normalY * edge * halfWidth;
+      sample.z = thickness * (0.16 + cross * 0.84);
+      sample.nx = normalX * across / normalLength;
+      sample.ny = normalY * across / normalLength;
+      sample.nz = vertical / normalLength;
+      sample.light = surfaceLight(sample.nx, sample.ny, sample.nz);
+      sample.edge = Math.abs(edge);
+      return sample;
+    }
+
+    function bodyCharacter(progress, edge, noise, patch, light) {
+      if (light < 0.54) return noise < 0.52 ? '#' : '@';
+      if (edge > 0.88) return noise < 0.45 ? '@' : '0';
+      if (noise < 0.15) return '8';
+      if (noise < 0.37) return '@';
+      if (noise < 0.65) return '0';
+      if (noise < 0.91) return 'O';
+      return patch === 1 || patch === 2 ? '8' : '#';
+    }
+
+    function bodyColor(fish, patch, light) {
+      let color = fish.palette[0];
+      if (patch === 1) color = fish.palette[1];
+      else if (patch === 2) color = fish.palette[2];
+      else if (patch === 3) color = fish.palette[4];
+      return shadeColor(color, light);
     }
 
     function drawTail(fish) {
-      const wag = Math.sin(elapsed * 3.1 + fish.phase) * 0.85;
+      const wag = Math.sin(elapsed * 3.1 + fish.phase) * 1.05;
       const steps = Math.ceil(fish.tailLength / Math.max(1, cellW * 0.26));
       for (let step = 0; step <= steps; step++) {
         const progress = step / steps;
@@ -475,7 +519,7 @@
         const normalY = Math.cos(point.a);
         const halfWidth = (0.80 + Math.sin(progress * Math.PI * 0.5) * 7.0) * cellW * fish.scale;
         const notch = Math.max(0, (progress - 0.55) / 0.45) * 4.50 * cellW * fish.scale;
-        const radius = Math.ceil(halfWidth / Math.min(cellW, cellH)) + 1;
+        const radius = Math.ceil(halfWidth / Math.min(cellW, cellH)) + 2;
         const centerColumn = Math.round(point.x / cellW);
         const centerRow = Math.round(point.y / cellH);
         for (let rowOffset = -radius; rowOffset <= radius; rowOffset++) {
@@ -490,18 +534,18 @@
             if (Math.abs(along) > Math.max(cellW, cellH) * 0.55) continue;
             if (distanceFromCenter > halfWidth || distanceFromCenter < notch) continue;
             const edge = distanceFromCenter / Math.max(1, halfWidth);
-            project(worldColumn * cellW, worldRow * cellH, screenPoint);
+            const z = (0.35 + (1 - progress) * 1.65 + (1 - edge) * 0.55) * cellH * fish.scale;
+            project(worldColumn * cellW, worldRow * cellH, z, screenPoint);
             const column = Math.round(screenPoint.x / cellW);
             const row = Math.round(screenPoint.y / cellH);
             const noise = cellNoise(column, row, fish);
             const angle = Math.atan2(lateral, progress * fish.tailLength + cellW);
             const ray = Math.abs(Math.sin(angle * 30));
-            let character = noise < 0.38 ? '0' : (noise < 0.90 ? 'O' : 'o');
-            if (ray > 0.96) character = ':';
-            if (edge > 0.93) character = noise < 0.65 ? ':' : '.';
-            const color = progress < 0.24 ? fish.palette[1]
-              : (ray > 0.96 ? fish.palette[0] : (fish.pattern % 2 ? fish.palette[4] : fish.palette[3]));
-            putFish(column, row, character, color, 0.72 + (1 - progress) * 0.22, fish, 1);
+            const light = surfaceLight(normalX * lateral / Math.max(1, halfWidth), normalY * lateral / Math.max(1, halfWidth), 0.72);
+            const character = ray > 0.96 ? '@' : (noise < 0.20 ? '8' : (noise < 0.58 ? '0' : 'O'));
+            const baseColor = progress < 0.24 ? fish.palette[1]
+              : (ray > 0.96 ? fish.palette[0] : (fish.pattern % 2 ? fish.palette[4] : fish.palette[2]));
+            putFish(column, row, character, shadeColor(baseColor, light), 0.80 + (1 - progress) * 0.16, fish, 1);
           }
         }
       }
@@ -528,17 +572,17 @@
               const along = sweepCenter + sweep;
               const x = point.x + normalX * spread + forwardX * along;
               const y = point.y + normalY * spread + forwardY * along;
-              project(x, y, screenPoint);
+              const z = (1.15 + bodyWidth(progress) * 0.26 + Math.sin(t * Math.PI * 0.72) * 1.55 + beat * side * t * 0.42) * cellH * fish.scale;
+              project(x, y, z, screenPoint);
               const column = Math.round(screenPoint.x / cellW);
               const row = Math.round(screenPoint.y / cellH);
               const noise = cellNoise(column, row, fish);
               const ray = Math.abs(Math.sin(sweep / cellW * 3.4 + t * 4));
-              let character = noise < 0.35 ? '0' : (noise < 0.90 ? 'O' : 'o');
-              if (ray > 0.95) character = ':';
-              if (t > 0.90) character = noise < 0.6 ? ':' : 'o';
-              const color = t < 0.26 && noise > 0.48 ? fish.palette[1]
-                : (ray > 0.95 ? fish.palette[0] : (fish.pattern % 2 ? fish.palette[4] : fish.palette[3]));
-              putFish(column, row, character, color, 0.72 + (1 - t) * 0.22, fish, 2);
+              const light = surfaceLight(normalX * side * 0.48, normalY * side * 0.48, 0.72);
+              const character = ray > 0.95 ? '#' : (noise < 0.22 ? '8' : (noise < 0.58 ? '0' : 'O'));
+              const baseColor = t < 0.26 && noise > 0.48 ? fish.palette[1]
+                : (ray > 0.95 ? fish.palette[0] : (fish.pattern % 2 ? fish.palette[4] : fish.palette[2]));
+              putFish(column, row, character, shadeColor(baseColor, light), 0.80 + (1 - t) * 0.16, fish, 2);
             }
           }
         }
@@ -547,6 +591,7 @@
 
     function drawBody(fish) {
       const step = Math.min(cellW, cellH) * 0.28;
+      const sample = {};
       for (let distance = fish.bodyLength; distance >= 0; distance -= step) {
         const progress = distance / fish.bodyLength;
         spineAt(fish, distance, point);
@@ -555,7 +600,7 @@
         const normalX = -Math.sin(point.a);
         const normalY = Math.cos(point.a);
         const halfWidth = bodyWidth(progress) * cellW * fish.scale;
-        const radius = Math.ceil(halfWidth / Math.min(cellW, cellH)) + 1;
+        const radius = Math.ceil(halfWidth / Math.min(cellW, cellH)) + 2;
         for (let rowOffset = -radius; rowOffset <= radius; rowOffset++) {
           for (let columnOffset = -radius; columnOffset <= radius; columnOffset++) {
             const worldColumn = centerColumn + columnOffset;
@@ -566,15 +611,15 @@
             const along = dx * Math.cos(point.a) + dy * Math.sin(point.a);
             if (Math.abs(along) > Math.max(cellW, cellH) * 0.55) continue;
             if (Math.abs(lateral) > halfWidth) continue;
-            const edge = Math.abs(lateral) / Math.max(1, halfWidth);
-            project(worldColumn * cellW, worldRow * cellH, screenPoint);
+            sampleBody(fish, progress, lateral / Math.max(1, halfWidth), point, sample);
+            project(sample.x, sample.y, sample.z, screenPoint);
             const column = Math.round(screenPoint.x / cellW);
             const row = Math.round(screenPoint.y / cellH);
-            const noise = cellNoise(column, row, fish);
+            const noise = cellNoise(worldColumn, worldRow, fish);
             const patch = bodyPatch(fish, progress, lateral / cellW);
-            const character = bodyCharacter(progress, edge, noise, patch);
-            const color = bodyColor(fish, patch, edge);
-            putFish(column, row, character, color, 0.82 + (1 - edge) * 0.16, fish, 3);
+            const character = bodyCharacter(progress, sample.edge, noise, patch, sample.light);
+            const color = bodyColor(fish, patch, sample.light);
+            putFish(column, row, character, color, 0.88 + (1 - sample.edge) * 0.10, fish, 3);
           }
         }
       }
@@ -585,19 +630,22 @@
       drawFins(fish);
       drawBody(fish);
 
-      spineAt(fish, fish.bodyLength * 0.105, point);
-      const normalX = -Math.sin(point.a);
-      const normalY = Math.cos(point.a);
+      const feature = {};
       for (let side = -1; side <= 1; side += 2) {
-        const x = point.x + normalX * side * cellW * 2.12 * fish.scale;
-        const y = point.y + normalY * side * cellW * 2.12 * fish.scale;
-        project(x, y, screenPoint);
-        putFish(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), '0', fish.palette[5], 1, fish, 5);
+        sampleBody(fish, 0.105, side * 0.48, null, feature);
+        project(feature.x, feature.y, feature.z + cellH * 0.12, screenPoint);
+        putFish(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), '8', fish.palette[5], 1, fish, 6);
+
+        for (let gill = 0; gill < 3; gill++) {
+          sampleBody(fish, 0.18 + gill * 0.025, side * (0.76 - gill * 0.035), null, feature);
+          project(feature.x, feature.y, feature.z, screenPoint);
+          putFish(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), '#', fish.palette[2], 0.96, fish, 5);
+        }
       }
 
-      spineAt(fish, fish.bodyLength * 0.025, point);
-      project(point.x, point.y, screenPoint);
-      putFish(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), 'O', fish.palette[3], 0.96, fish, 4);
+      sampleBody(fish, 0.018, 0, null, feature);
+      project(feature.x, feature.y, feature.z, screenPoint);
+      putFish(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), '@', fish.palette[5], 1, fish, 6);
     }
 
     function addRipple(x, y, strength) {
@@ -622,7 +670,7 @@
           const angle = j / marks * TAU;
           const x = ripple.x + Math.cos(angle) * radius;
           const y = ripple.y + Math.sin(angle) * radius * 0.58;
-          project(x, y, screenPoint);
+          project(x, y, 0, screenPoint);
           putWater(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), j % 2 ? '-' : '.', '#9aa8ad', alpha);
         }
       }
@@ -638,7 +686,7 @@
         const wave = Math.sin(elapsed * mote.drift + mote.phase);
         const x = mote.x + Math.round(Math.sin(elapsed * 0.09 + mote.phase) * 0.65) * cellW;
         const y = mote.y + Math.round(wave * 0.22) * cellH;
-        project(x, y, screenPoint);
+        project(x, y, 0, screenPoint);
         putWater(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), mote.glyph, '#929da2', 0.13 + mote.shade * 0.12 + wave * 0.02);
       }
     }
