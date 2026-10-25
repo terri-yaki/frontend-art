@@ -683,7 +683,7 @@
             const worldRow = centerRow + rowOffset;
             const dx = worldColumn * cellW - point.x;
             const dy = worldRow * cellH - point.y;
-            const lateral = dx * normalX + dy * normalY - wag * progress * cellW * fish.scale * ANATOMY_SCALE;
+            const lateral = dx * normalX + dy * normalY - wag * progress * cellW * ANATOMY_SCALE;
             const along = dx * Math.cos(point.a) + dy * Math.sin(point.a);
             const distanceFromCenter = Math.abs(lateral);
             if (Math.abs(along) > Math.max(cellW, cellH) * 0.55) continue;
