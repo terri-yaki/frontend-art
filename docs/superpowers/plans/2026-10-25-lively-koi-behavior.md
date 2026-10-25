@@ -54,7 +54,7 @@
 - Doubles body length/width and fin/tail dimensions relative to `de93e8e` at the same viewport/scale.
 
 - [x] Write failing-first checks for the 2× size multiplier, reduced responsive school count, full-silhouette clearance, and preserved integer-grid projection. Confirm failure before implementation.
-- [x] Implement a single clear 2× anatomy multiplier applied consistently to body, fins, tail, eyes/gills, history, and shadows. Reduce school size to 4/3/1 and adjust initial distribution/avoidance for larger animals without shrinking them again indirectly.
+- [x] Implement a single clear 2× anatomy multiplier applied consistently to body, fins, tail, eyes/gills, history, and shadows. Use 2 koi only at viewport width ≥1000px and height ≥700px, otherwise 1, with dynamic placement/reflow into accepted safe homes and no indirect anatomy reduction.
 - [x] Run checks and syntax/diff validation. Browser-check 1440×900, 1280×720, and 390×844 through swimming and orbit; iterate on spacing only while preserving true 2× anatomy.
 - [x] Request task review, address Critical/Important findings, and remove temporary harness.
 
@@ -64,7 +64,7 @@
 - Modify: `README.md` and design documentation as needed
 - Review: full diff from `de93e8e`
 
-- [x] Update concise behavior/size documentation and ensure design matches delivery, including responsive 4/3/1 counts and preserved-camera cropping at extreme zoom/tilt.
+- [x] Update concise behavior/size documentation and ensure design matches delivery, including responsive 2/1 counts, accepted safe homes, and preserved-camera cropping at extreme zoom/tilt.
 - [x] Run syntax/diff checks and confirm no temporary harnesses remain. Review the complete diff and use the recorded browser evidence for behavior, camera, pause/reduced-motion, and mobile layout.
 - [x] Commit the design doc, plan doc, and README only.
 - [ ] Merge the reviewed branch to `main`, push, monitor Pages deployment, and verify the live release.
