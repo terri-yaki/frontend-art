@@ -631,6 +631,17 @@
       return false;
     }
 
+    function refreshBackingStore(nextDpr) {
+      dpr = nextDpr;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.font = fontSize + 'px "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      draw();
+    }
+
     function resize() {
       const previousWidth = width;
       const previousHeight = height;
@@ -1653,8 +1664,10 @@
       if (id === 'koi') {
         updateButton();
         const normalizedDpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-        if (width !== window.innerWidth || height !== window.innerHeight || dpr !== normalizedDpr) {
+        if (width !== window.innerWidth || height !== window.innerHeight) {
           resize();
+        } else if (dpr !== normalizedDpr) {
+          refreshBackingStore(normalizedDpr);
         } else {
           maskInterface();
           draw();
