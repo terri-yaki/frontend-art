@@ -122,7 +122,7 @@ a:focus-visible {
   min-width: 44px;
   min-height: 44px;
   padding: 8px 10px;
-  color: var(--muted);
+  color: var(--ink);
   font-size: 10px;
   letter-spacing: 0.08em;
   line-height: 1.2;
@@ -131,7 +131,7 @@ a:focus-visible {
 }
 
 .exhibit-nav a span {
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .exhibit-nav a:hover,

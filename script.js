@@ -1652,7 +1652,8 @@
     gallery.subscribe((id) => {
       if (id === 'koi') {
         updateButton();
-        if (width !== window.innerWidth || height !== window.innerHeight) {
+        const normalizedDpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+        if (width !== window.innerWidth || height !== window.innerHeight || dpr !== normalizedDpr) {
           resize();
         } else {
           maskInterface();
