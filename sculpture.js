@@ -423,14 +423,21 @@
     }
 
     function beginMorph(automatic = false) {
-      if (morphing) return;
+      const staticStep = paused || motionQuery.matches;
+      if (morphing) {
+        if (!automatic && staticStep) {
+          completeMorph();
+          beginMorph();
+        }
+        return;
+      }
       morphFrom = currentForm;
       morphTo = (currentForm + 1) % FORM_NAMES.length;
       morphProgress = 0;
       morphing = true;
       morphAutomatic = automatic;
       morphHold = 0;
-      if (paused || motionQuery.matches) {
+      if (staticStep) {
         completeMorph();
         draw();
       } else {
@@ -502,6 +509,10 @@
 
     function isInterfaceTarget(target) {
       return target instanceof Element && target.closest('button, a, input, select, textarea, [role="button"], [contenteditable="true"]');
+    }
+
+    function isEditableTarget(target) {
+      return target instanceof Element && target.closest('input, select, textarea, [role="textbox"], [contenteditable="true"]');
     }
 
     function releaseCapture(pointerId) {
@@ -613,7 +624,9 @@
     });
 
     listenActive('keydown', (event) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || isInterfaceTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
+      const space = event.key === ' ' || event.key === 'Spacebar';
+      if ((space && isInterfaceTarget(event.target)) || (event.repeat && (space || event.key === 'm' || event.key === 'M'))) return;
       let handled = true;
       if (event.key === 'ArrowLeft') targetYaw -= 0.12;
       else if (event.key === 'ArrowRight') targetYaw += 0.12;
@@ -623,7 +636,7 @@
       else if (event.key === '-' || event.key === '_') targetZoom = clamp(targetZoom - 0.08, MIN_ZOOM, MAX_ZOOM);
       else if (event.key === 'r' || event.key === 'R') resetCamera();
       else if (event.key === 'm' || event.key === 'M') beginMorph();
-      else if (event.key === ' ' || event.key === 'Spacebar') setPaused(!paused);
+      else if (space) setPaused(!paused);
       else handled = false;
       if (handled) {
         event.preventDefault();
