@@ -37,6 +37,7 @@
     const water = [];
     const ripples = [];
     const fishes = [];
+    const interfaceBounds = [];
     const pointers = new Map();
     const point = { x: 0, y: 0, a: 0 };
     const screenPoint = { x: 0, y: 0 };
@@ -54,6 +55,9 @@
     let cellOwners = new Int16Array(1);
     let cellPriorities = new Uint8Array(1);
     let uiMask = new Uint8Array(1);
+    let rendererAudit = null;
+    let placementAuditIndex = -1;
+    let placementAuditOwners = new Int16Array(1);
     let background = null;
     let yaw = 0;
     let tilt = 0;
@@ -167,6 +171,9 @@
       this.index = index;
       this.x = 0;
       this.y = 0;
+      this.homeX = 0;
+      this.homeY = 0;
+      this.homeHeading = 0;
       this.heading = 0;
       this.turn = 0;
       this.vx = 0;
@@ -211,7 +218,7 @@
       const agility = fish.temperament.agility;
       if (fish.state === 'dart') {
         fish.targetSpeed = fish.baseSpeed * (2.35 + energy * 0.20);
-        fish.accelerationLimit = 42 * agility;
+        fish.accelerationLimit = 80 * agility;
         fish.turnLimit = 1.45 * agility;
       } else if (fish.state === 'brake') {
         fish.targetSpeed = fish.baseSpeed * 0.22;
@@ -273,6 +280,8 @@
     function initializeFish(fish, x, y, heading) {
       fish.x = x;
       fish.y = y;
+      fish.homeX = x;
+      fish.homeY = y;
       fish.heading = heading;
       fish.turn = 0;
       if (fish.speed <= 0 && fish.state !== 'rest') fish.speed = fish.targetSpeed * 0.65;
@@ -354,11 +363,18 @@
 
     function maskInterface() {
       uiMask.fill(0);
+      interfaceBounds.length = 0;
       const elements = document.querySelectorAll('.site-header > *, .exhibit-caption, .site-footer > *');
       for (let i = 0; i < elements.length; i++) {
         const rect = elements[i].getBoundingClientRect();
         const paddingX = cellW * 2;
         const paddingY = cellH;
+        interfaceBounds.push({
+          left: rect.left - paddingX,
+          right: rect.right + paddingX,
+          top: rect.top - paddingY,
+          bottom: rect.bottom + paddingY
+        });
         const left = Math.max(0, Math.floor((rect.left - paddingX) / cellW));
         const right = Math.min(columns - 1, Math.ceil((rect.right + paddingX) / cellW));
         const top = Math.max(0, Math.floor((rect.top - paddingY) / cellH));
@@ -376,11 +392,20 @@
     }
 
     function putCell(column, row, character, color, alpha, owner, priority) {
-      if (column < 0 || column >= columns || row < 0 || row >= rows) return;
+      if (column < 0 || column >= columns || row < 0 || row >= rows) {
+        if (rendererAudit && owner >= 0) rendererAudit.clear = false;
+        return;
+      }
       const index = row * columns + column;
-      if (uiMask[index]) return;
+      if (uiMask[index]) {
+        if (rendererAudit && owner >= 0) rendererAudit.clear = false;
+        return;
+      }
       const occupant = cellOwners[index];
-      if (occupant >= 0 && (occupant !== owner || cellPriorities[index] > priority)) return;
+      if (occupant >= 0 && (occupant !== owner || cellPriorities[index] > priority)) {
+        if (rendererAudit && owner >= 0 && occupant !== owner) rendererAudit.clear = false;
+        return;
+      }
       cells[index] = character;
       cellColors[index] = color;
       cellAlphas[index] = alpha;
@@ -455,78 +480,149 @@
     }
 
     function desiredFishCount() {
-      if (width < 600) return 1;
-      if (width < 1000) return 3;
-      return 4;
+      return width <= 700 ? 1 : 2;
+    }
+
+    function layoutSlot(index) {
+      if (width <= 700) return { x: width * (width < 600 ? 0.58 : 0.46), y: height * (width < 600 ? 0.30 : 0.36), heading: 4.5 };
+      if (index === 0) return { x: width * (width < 1100 ? 0.50 : (width < 1440 ? 0.47 : 0.45)), y: height <= 800 ? 260 : 300, heading: 0 };
+      return { x: width - (width >= 1100 && width < 1440 ? 180 : Math.max(150, width * 0.12)), y: height * (width < 1100 ? 0.68 : 0.64), heading: 0 };
+    }
+
+    function motionHome(index) {
+      const slot = layoutSlot(index);
+      return { x: slot.x, y: slot.y };
     }
 
     function silhouetteMargin(fish) {
       return cellW * 12 * fish.scale * ANATOMY_SCALE;
     }
 
-    function reservedAt(x, y, margin) {
-      const edgePadding = width < 600 ? 32 : 64;
-      if (x < margin || x > width - margin || y < edgePadding + margin || y > height - edgePadding - margin) return true;
-      if (width < 600) return false;
-      const captionRight = (width < 600 ? 180 : 220) + margin + (width < 600 ? 22 : 40);
-      const captionTop = height - (width < 600 ? 190 : 250) - margin;
-      return x < captionRight && y > captionTop;
+    function anatomyRadius(fish, distance) {
+      const unit = cellW * fish.scale * ANATOMY_SCALE;
+      let radius;
+      if (distance <= fish.bodyLength) {
+        const progress = distance / fish.bodyLength;
+        radius = bodyWidth(progress) * unit;
+        const firstFin = Math.abs(progress - 0.34) < 0.09;
+        const secondFin = Math.abs(progress - 0.63) < 0.075;
+        if (firstFin) radius = Math.max(radius, (bodyWidth(progress) * 0.62 + 8.70) * unit);
+        if (secondFin) radius = Math.max(radius, (bodyWidth(progress) * 0.62 + 6.28) * unit);
+      } else {
+        const progress = (distance - fish.bodyLength) / fish.tailLength;
+        radius = (0.80 + Math.sin(progress * Math.PI * 0.5) * 7.0) * unit + cellW * 1.2 * ANATOMY_SCALE;
+      }
+      return radius + cellW * 0.75;
     }
 
-    function initialSilhouetteClear(fish, x, y, heading) {
-      const margin = silhouetteMargin(fish);
+    function silhouettePoints(fish, x, y, heading) {
       const totalLength = fish.bodyLength + fish.tailLength;
+      const straight = x !== undefined;
       const samples = Math.max(12, Math.ceil(totalLength / (cellW * 2)));
+      const points = new Array(samples + 1);
       for (let i = 0; i <= samples; i++) {
         const distance = totalLength * i / samples;
-        const px = x - Math.cos(heading) * distance;
-        const py = y - Math.sin(heading) * distance;
-        if (reservedAt(px, py, margin)) return false;
+        const margin = anatomyRadius(fish, distance);
+        if (straight) {
+          points[i] = { x: x - Math.cos(heading) * distance, y: y - Math.sin(heading) * distance, margin };
+        } else {
+          const sample = { margin };
+          spineAt(fish, distance, sample);
+          points[i] = sample;
+        }
       }
-      for (let i = 0; i < fish.index; i++) {
-        const other = fishes[i];
-        const dx = x - other.x;
-        const dy = y - other.y;
-        const range = (totalLength + other.bodyLength + other.tailLength) * 0.38;
-        if (dx * dx + dy * dy < range * range) return false;
+      return points;
+    }
+
+    function renderedSchoolClear(count) {
+      const savedYaw = yaw;
+      const savedTilt = tilt;
+      const savedZoom = zoom;
+      yaw = 0;
+      tilt = 0;
+      zoom = 1;
+      rendererAudit = { clear: true };
+      clearGrid();
+      for (let i = 0; i < count; i++) drawFish(fishes[i]);
+      const clear = rendererAudit.clear;
+      rendererAudit = null;
+      clearGrid();
+      yaw = savedYaw;
+      tilt = savedTilt;
+      zoom = savedZoom;
+      return clear;
+    }
+
+    function initialSilhouetteClear(fish) {
+      const savedYaw = yaw;
+      const savedTilt = tilt;
+      const savedZoom = zoom;
+      yaw = 0;
+      tilt = 0;
+      zoom = 1;
+      if (placementAuditIndex !== fish.index) {
+        clearGrid();
+        for (let i = 0; i < fish.index; i++) drawFish(fishes[i]);
+        placementAuditOwners = cellOwners.slice();
+        placementAuditIndex = fish.index;
       }
-      return true;
+      clearGrid();
+      cellOwners.set(placementAuditOwners);
+      rendererAudit = { clear: true };
+      drawFish(fish);
+      const clear = rendererAudit.clear;
+      rendererAudit = null;
+      yaw = savedYaw;
+      tilt = savedTilt;
+      zoom = savedZoom;
+      return clear;
+    }
+
+    function currentSchoolClear() {
+      return renderedSchoolClear(fishes.length);
     }
 
     function placeFish(fish, baseX, baseY, preferredHeading) {
+      placementAuditIndex = -1;
       initializeFish(fish, baseX, baseY, preferredHeading);
-      for (let attempt = 0; attempt < 240; attempt++) {
+      for (let attempt = 0; attempt < 96; attempt++) {
         let x = baseX;
         let y = baseY;
         let heading = preferredHeading;
-        if (attempt > 0 && attempt < 48) {
+        if (attempt > 0 && attempt < 32) {
           x += (random() - 0.5) * Math.min(150, width * 0.16);
           y += (random() - 0.5) * Math.min(130, height * 0.18);
           heading += (random() - 0.5) * 2.2;
-        } else if (attempt >= 48) {
+        } else if (attempt >= 32) {
           x = random() * width;
           y = 64 + random() * Math.max(1, height - 128);
           heading = random() * TAU;
         }
-        if (!initialSilhouetteClear(fish, x, y, heading)) continue;
         initializeFish(fish, x, y, heading);
-        return;
+        if (!initialSilhouetteClear(fish)) continue;
+        return true;
       }
-      const step = cellW * 8;
+      if (height < 500) return false;
+      const step = width < 600 ? 4 : cellW * 3;
+      const headings = width < 600 ? 64 : 16;
       for (let y = step; y < height; y += step) {
         for (let x = step; x < width; x += step) {
-          for (let i = 0; i < 16; i++) {
-            const heading = preferredHeading + i * TAU / 16;
-            if (!initialSilhouetteClear(fish, x, y, heading)) continue;
+          for (let i = 0; i < headings; i++) {
+            const heading = preferredHeading + i * TAU / headings;
             initializeFish(fish, x, y, heading);
-            return;
+            if (!initialSilhouetteClear(fish)) continue;
+            return true;
           }
         }
       }
-      initializeFish(fish, baseX, baseY, preferredHeading);
+      return false;
     }
 
     function resize() {
+      const previousWidth = width;
+      const previousHeight = height;
+      const previousCellW = cellW;
+      const previousCellH = cellH;
       width = Math.max(1, window.innerWidth);
       height = Math.max(1, window.innerHeight);
       dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
@@ -553,26 +649,65 @@
       ripples.length = 0;
 
       const count = desiredFishCount();
+      const preservePausedLayout = paused && fishes.length === count && count > 0
+        && previousCellW === cellW && previousCellH === cellH;
+      const minorResize = Math.abs(width - previousWidth) <= cellW && Math.abs(height - previousHeight) <= cellH;
+      if (preservePausedLayout && (minorResize || currentSchoolClear())) {
+        draw();
+        return;
+      }
       fishes.length = Math.min(fishes.length, count);
       while (fishes.length < count) fishes.push(new Fish(fishes.length));
-      const phoneLayout = width < 600;
-      const layoutColumns = phoneLayout ? 1 : 2;
-      const layoutRows = Math.ceil(count / layoutColumns);
-      const marginX = Math.min(width * 0.15, 105);
-      const marginY = Math.min(height * 0.15, 105);
-      const layoutTop = marginY;
-      const layoutHeight = phoneLayout ? 0 : height - marginY * 2;
-      for (let i = 0; i < fishes.length; i++) {
-        const fish = fishes[i];
-        const column = i % layoutColumns;
-        const row = Math.floor(i / layoutColumns);
-        const heading = phoneLayout ? -Math.PI * 0.5 : (i % 2 ? Math.PI : 0);
-        if (phoneLayout) initializeFish(fish, 0, 0, heading);
-        const x = phoneLayout ? width * 0.5
-          : marginX + (width - marginX * 2) * (column + 0.5) / layoutColumns;
-        const y = phoneLayout ? height - 32 - silhouetteMargin(fish) - fish.bodyLength - fish.tailLength
-          : layoutTop + layoutHeight * (row + 0.5) / layoutRows;
-        placeFish(fish, x, y, heading);
+      const pausedStates = paused ? fishes.map((fish) => ({
+        fish,
+        heading: fish.heading,
+        turn: fish.turn,
+        vx: fish.vx,
+        vy: fish.vy,
+        speed: fish.speed,
+        previousSpeed: fish.previousSpeed,
+        acceleration: fish.acceleration,
+        state: fish.state,
+        stateTimer: fish.stateTimer,
+        targetSpeed: fish.targetSpeed,
+        accelerationLimit: fish.accelerationLimit,
+        turnLimit: fish.turnLimit,
+        targetTurn: fish.targetTurn,
+        tailPhase: fish.tailPhase,
+        tailFrequency: fish.tailFrequency,
+        tailAmplitude: fish.tailAmplitude,
+        finBrake: fish.finBrake,
+        bank: fish.bank
+      })) : [];
+      let reflows = 0;
+      while (fishes.length > 0) {
+        let placed = true;
+        for (let i = 0; i < fishes.length; i++) {
+          const fish = fishes[i];
+          const slot = layoutSlot(i);
+          const heading = pausedStates[i] ? pausedStates[i].heading : slot.heading;
+          initializeFish(fish, 0, 0, heading);
+          if (!placeFish(fish, slot.x, slot.y, heading)) {
+            placed = false;
+            break;
+          }
+          const home = motionHome(i);
+          fish.homeX = home.x;
+          fish.homeY = home.y;
+          fish.homeHeading = slot.heading - (width < 600 ? 0.05 : 0);
+          if (width < 600) fish.tailPhase += 1;
+          const state = pausedStates[i];
+          if (state) {
+            const fields = Object.keys(state);
+            for (let j = 1; j < fields.length; j++) fish[fields[j]] = state[fields[j]];
+          }
+        }
+        if (placed) break;
+        reflows++;
+        if (reflows >= 2) {
+          fishes.length--;
+          reflows = 0;
+        }
       }
       draw();
     }
@@ -780,7 +915,91 @@
       }
     }
 
+    function auditFish(fish) {
+      const wag = Math.sin(fish.tailPhase) * fish.tailAmplitude * 1.05;
+      const tailSteps = Math.ceil(fish.tailLength / Math.max(1, cellW * 0.26));
+      for (let step = 0; step <= tailSteps; step++) {
+        const progress = step / tailSteps;
+        spineAt(fish, fish.bodyLength + progress * fish.tailLength, point);
+        const normalX = -Math.sin(point.a);
+        const normalY = Math.cos(point.a);
+        const halfWidth = (0.80 + Math.sin(progress * Math.PI * 0.5) * 7.0) * cellW * fish.scale * ANATOMY_SCALE;
+        const notch = Math.max(0, (progress - 0.55) / 0.45) * 4.50 * cellW * fish.scale * ANATOMY_SCALE;
+        const radius = Math.ceil(halfWidth / Math.min(cellW, cellH)) + 2;
+        const centerColumn = Math.round(point.x / cellW);
+        const centerRow = Math.round(point.y / cellH);
+        for (let rowOffset = -radius; rowOffset <= radius; rowOffset++) {
+          for (let columnOffset = -radius; columnOffset <= radius; columnOffset++) {
+            const worldColumn = centerColumn + columnOffset;
+            const worldRow = centerRow + rowOffset;
+            const dx = worldColumn * cellW - point.x;
+            const dy = worldRow * cellH - point.y;
+            const lateral = dx * normalX + dy * normalY - wag * progress * cellW * ANATOMY_SCALE;
+            const along = dx * Math.cos(point.a) + dy * Math.sin(point.a);
+            const distanceFromCenter = Math.abs(lateral);
+            if (Math.abs(along) > Math.max(cellW, cellH) * 0.55) continue;
+            if (distanceFromCenter > halfWidth || distanceFromCenter < notch) continue;
+            putFish(worldColumn, worldRow, '@', '#000', 1, fish, 1);
+          }
+        }
+      }
+
+      const beat = Math.sin(fish.tailPhase * 0.73 + fish.phase) * (1 - fish.finBrake * 0.65);
+      for (let pair = 0; pair < 2; pair++) {
+        const progress = pair === 0 ? 0.34 : 0.63;
+        spineAt(fish, fish.bodyLength * progress, point);
+        const forwardX = Math.cos(point.a);
+        const forwardY = Math.sin(point.a);
+        const normalX = -Math.sin(point.a);
+        const normalY = Math.cos(point.a);
+        const rootWidth = bodyWidth(progress) * cellW * fish.scale * ANATOMY_SCALE;
+        for (let side = -1; side <= 1; side += 2) {
+          const reach = (pair === 0 ? 6.0 : 4.60) + fish.finBrake * (pair === 0 ? 2.40 : 1.40) + beat * side * 0.28;
+          for (let t = 0; t <= 1.001; t += 0.05) {
+            const spread = side * (rootWidth * 0.62 + t * reach * cellW * fish.scale * ANATOMY_SCALE);
+            const sweepCenter = t * (pair === 0 ? 3.0 : 2.30) * cellW * ANATOMY_SCALE;
+            const halfChord = (1 - t) * (pair === 0 ? 2.50 : 1.90) * cellW * ANATOMY_SCALE;
+            for (let sweep = -halfChord; sweep <= halfChord + 0.01; sweep += cellW * 0.25) {
+              const along = sweepCenter + sweep;
+              const x = point.x + normalX * spread + forwardX * along;
+              const y = point.y + normalY * spread + forwardY * along;
+              putFish(Math.round(x / cellW), Math.round(y / cellH), '@', '#000', 1, fish, 2);
+            }
+          }
+        }
+      }
+
+      const bodyStep = Math.min(cellW, cellH) * 0.28;
+      for (let distance = fish.bodyLength; distance >= 0; distance -= bodyStep) {
+        const progress = distance / fish.bodyLength;
+        spineAt(fish, distance, point);
+        const centerColumn = Math.round(point.x / cellW);
+        const centerRow = Math.round(point.y / cellH);
+        const normalX = -Math.sin(point.a);
+        const normalY = Math.cos(point.a);
+        const halfWidth = bodyWidth(progress) * cellW * fish.scale * ANATOMY_SCALE;
+        const radius = Math.ceil(halfWidth / Math.min(cellW, cellH)) + 2;
+        for (let rowOffset = -radius; rowOffset <= radius; rowOffset++) {
+          for (let columnOffset = -radius; columnOffset <= radius; columnOffset++) {
+            const worldColumn = centerColumn + columnOffset;
+            const worldRow = centerRow + rowOffset;
+            const dx = worldColumn * cellW - point.x;
+            const dy = worldRow * cellH - point.y;
+            const lateral = dx * normalX + dy * normalY;
+            const along = dx * Math.cos(point.a) + dy * Math.sin(point.a);
+            if (Math.abs(along) > Math.max(cellW, cellH) * 0.55) continue;
+            if (Math.abs(lateral) > halfWidth) continue;
+            putFish(worldColumn, worldRow, '@', '#000', 1, fish, 3);
+          }
+        }
+      }
+    }
+
     function drawFish(fish) {
+      if (rendererAudit) {
+        auditFish(fish);
+        return;
+      }
       drawTail(fish);
       drawFins(fish);
       drawBody(fish);
@@ -903,28 +1122,50 @@
       drawGrid();
     }
 
-    function addEnvironmentAvoidance(fish, x, y, weight, avoid) {
-      const margin = silhouetteMargin(fish);
-      const influence = Math.max(54, fish.bodyLength * (width < 600 ? 0.65 : 0.30));
-      const span = influence * 2;
+    function addEnvironmentAvoidance(fish, x, y, weight, avoid, margin) {
+      const influence = Math.max(90, cellW * 14);
       const edgePadding = width < 600 ? 32 : 64;
-      const top = edgePadding + margin;
-      const bottom = height - edgePadding - margin;
-      const right = width - margin;
-      const topForce = Math.max(0, Math.min(1, (top + influence - y) / span));
-      const bottomForce = Math.max(0, Math.min(1, (y - bottom + influence) / span));
-      const leftForce = Math.max(0, Math.min(1, (margin + influence - x) / span));
-      const rightForce = Math.max(0, Math.min(1, (x - right + influence) / span));
-      avoid.x += (leftForce - rightForce) * weight * 3.4;
-      avoid.y += (topForce - bottomForce) * weight * 3.4;
+      const forwardX = Math.cos(fish.heading);
+      const forwardY = Math.sin(fish.heading);
 
-      const captionRight = (width < 600 ? 180 : 220) + margin + (width < 600 ? 22 : 40);
-      const captionTop = height - (width < 600 ? 190 : 250) - margin;
-      const captionX = Math.max(0, Math.min(1, (captionRight + influence - x) / span));
-      const captionY = Math.max(0, Math.min(1, (y - captionTop + influence) / span));
-      if (captionX > 0 && captionY > 0) {
-        avoid.x += captionX * (0.45 + captionY) * weight * 3.0;
-        avoid.y -= captionY * (0.45 + captionX) * weight * 3.0;
+      function pressure(awayX, awayY, distance) {
+        const proximity = clamp(1 - distance / influence, 0, 1);
+        if (proximity <= 0) return;
+        const length = Math.max(0.001, Math.hypot(awayX, awayY));
+        const nx = awayX / length;
+        const ny = awayY / length;
+        avoid.x += nx * proximity * weight * 5.0;
+        avoid.y += ny * proximity * weight * 5.0;
+        const closing = clamp(-(forwardX * nx + forwardY * ny), 0, 1);
+        avoid.threat = Math.max(avoid.threat, proximity * closing);
+      }
+
+      pressure(1, 0, x - margin);
+      pressure(-1, 0, width - margin - x);
+      pressure(0, 1, y - edgePadding - margin);
+      pressure(0, -1, height - edgePadding - margin - y);
+
+      for (let i = 0; i < interfaceBounds.length; i++) {
+        const rect = interfaceBounds[i];
+        const left = rect.left - margin;
+        const right = rect.right + margin;
+        const top = rect.top - margin;
+        const bottom = rect.bottom + margin;
+        if (x >= left && x <= right && y >= top && y <= bottom) {
+          const distances = [x - left, right - x, y - top, bottom - y];
+          let side = 0;
+          for (let j = 1; j < 4; j++) if (distances[j] < distances[side]) side = j;
+          if (side === 0) pressure(-1, 0, -distances[0]);
+          else if (side === 1) pressure(1, 0, -distances[1]);
+          else if (side === 2) pressure(0, -1, -distances[2]);
+          else pressure(0, 1, -distances[3]);
+          continue;
+        }
+        const nearestX = clamp(x, left, right);
+        const nearestY = clamp(y, top, bottom);
+        const dx = x - nearestX;
+        const dy = y - nearestY;
+        pressure(dx, dy, Math.hypot(dx, dy));
       }
     }
 
@@ -937,24 +1178,24 @@
       targetTurn += Math.sin(elapsed * 0.17 + fish.phase * 2.1) * 0.12 * wandering;
       const totalLength = fish.bodyLength + fish.tailLength;
       const avoid = { x: 0, y: 0 };
-      const environmentAvoid = { x: 0, y: 0 };
+      const environmentAvoid = { x: 0, y: 0, threat: 0 };
       for (let i = 0; i <= 10; i++) {
-        spineAt(fish, totalLength * i / 10, point);
-        addEnvironmentAvoidance(fish, point.x, point.y, i === 0 ? 1.2 : 0.58, environmentAvoid);
+        const distance = totalLength * i / 10;
+        spineAt(fish, distance, point);
+        addEnvironmentAvoidance(fish, point.x, point.y, i === 0 ? 1.2 : 0.58, environmentAvoid, anatomyRadius(fish, distance));
       }
       spineAt(fish, 0, point);
-      const lookAhead = totalLength * 0.90;
+      const lookAhead = Math.min(totalLength * 0.55, Math.max(36, fish.speed * 1.4));
       addEnvironmentAvoidance(
         fish,
         point.x + Math.cos(fish.heading) * lookAhead,
         point.y + Math.sin(fish.heading) * lookAhead,
         1.5,
-        environmentAvoid
+        environmentAvoid,
+        anatomyRadius(fish, 0)
       );
-      const environmentStrength = Math.min(2.4, Math.hypot(environmentAvoid.x, environmentAvoid.y));
       avoid.x += environmentAvoid.x;
       avoid.y += environmentAvoid.y;
-
       let alignmentX = 0;
       let alignmentY = 0;
       let cohesionX = 0;
@@ -962,6 +1203,8 @@
       let neighbors = 0;
       let nearest = null;
       let nearestDistance = Infinity;
+      let neighborThreat = 0;
+      const fishPoints = silhouettePoints(fish);
       for (let i = 0; i < fishes.length; i++) {
         const other = fishes[i];
         if (other === fish) continue;
@@ -969,7 +1212,6 @@
         const dy = fish.y - other.y;
         const distanceSquared = dx * dx + dy * dy;
         const otherLength = other.bodyLength + other.tailLength;
-        const range = (totalLength + otherLength) * 0.62;
         const perception = (totalLength + otherLength) * 1.45;
         if (distanceSquared > 1 && distanceSquared < perception * perception) {
           const distance = Math.sqrt(distanceSquared);
@@ -977,17 +1219,43 @@
             nearest = other;
             nearestDistance = distance;
           }
-          if (distanceSquared < range * range) {
-            const force = (1 - distance / range) * 2.8;
-            avoid.x += dx / distance * force;
-            avoid.y += dy / distance * force;
-          }
           const influence = 1 - distance / perception;
           alignmentX += Math.cos(other.heading) * influence;
           alignmentY += Math.sin(other.heading) * influence;
           cohesionX -= dx / distance * influence;
           cohesionY -= dy / distance * influence;
           neighbors++;
+        }
+
+        const otherPoints = silhouettePoints(other);
+        let surfaceDistance = Infinity;
+        let awayX = 0;
+        let awayY = 0;
+        let localMargins = 0;
+        for (let j = 0; j < fishPoints.length; j++) {
+          for (let k = 0; k < otherPoints.length; k++) {
+            const ox = fishPoints[j].x - otherPoints[k].x;
+            const oy = fishPoints[j].y - otherPoints[k].y;
+            const squared = ox * ox + oy * oy;
+            if (squared < surfaceDistance) {
+              surfaceDistance = squared;
+              awayX = ox;
+              awayY = oy;
+              localMargins = fishPoints[j].margin + otherPoints[k].margin;
+            }
+          }
+        }
+        surfaceDistance = Math.sqrt(surfaceDistance) - localMargins - cellW * 2;
+        const localRange = Math.max(90, fish.speed * 2.0);
+        const proximity = clamp(1 - surfaceDistance / localRange, 0, 1);
+        if (proximity > 0) {
+          const length = Math.max(0.001, Math.hypot(awayX, awayY));
+          const nx = awayX / length;
+          const ny = awayY / length;
+          avoid.x += nx * proximity * 4.0;
+          avoid.y += ny * proximity * 4.0;
+          const closing = clamp(-(Math.cos(fish.heading) * nx + Math.sin(fish.heading) * ny), 0, 1);
+          neighborThreat = Math.max(neighborThreat, proximity * closing);
         }
       }
 
@@ -1003,17 +1271,16 @@
         targetTurn += angleDelta(desired, fish.heading) * fish.temperament.curiosity * 0.48;
       }
 
-      let avoidStrength = 0;
       if (avoid.x !== 0 || avoid.y !== 0) {
         const desired = Math.atan2(avoid.y, avoid.x);
         const difference = angleDelta(desired, fish.heading);
-        avoidStrength = Math.min(2.4, Math.sqrt(avoid.x * avoid.x + avoid.y * avoid.y));
+        const avoidStrength = Math.min(2.4, Math.sqrt(avoid.x * avoid.x + avoid.y * avoid.y));
         targetTurn += difference * avoidStrength;
       }
       let phoneOutward = false;
       if (width < 600) {
         const margin = silhouetteMargin(fish);
-        const buffer = cellW * 2;
+        const buffer = cellW * 3;
         const forwardX = Math.cos(fish.heading);
         const forwardY = Math.sin(fish.heading);
         phoneOutward = (fish.x < margin + buffer && forwardX < 0)
@@ -1025,14 +1292,29 @@
           targetTurn = angleDelta(inward, fish.heading) * 2;
         }
       }
+      const homeX = fish.homeX - fish.x;
+      const homeY = fish.homeY - fish.y;
+      const homeDistance = Math.hypot(homeX, homeY);
+      const homeRange = totalLength * (width <= 700 ? 0.02 : 0.04);
+      if (homeDistance > homeRange) {
+        const desired = Math.atan2(homeY, homeX);
+        targetTurn += angleDelta(desired, fish.heading) * clamp((homeDistance - homeRange) / homeRange, 0, 1.5) * 4.0;
+      }
+      if (width <= 700) {
+        if (homeDistance > homeRange) {
+          targetTurn = angleDelta(Math.atan2(homeY, homeX), fish.heading) * 4;
+        } else {
+          targetTurn = angleDelta(fish.homeHeading, fish.heading) * (width < 600 ? 1.0 : 0.5);
+        }
+      }
       fish.targetTurn = clamp(targetTurn, -fish.turnLimit, fish.turnLimit);
-      const turnBlend = 1 - Math.exp(-dt * 2.8 / fish.temperament.reaction);
+      const turnBlend = 1 - Math.exp(-dt * 4.2 / fish.temperament.reaction);
       fish.turn += (fish.targetTurn - fish.turn) * turnBlend;
       fish.turn = clamp(fish.turn, -fish.turnLimit, fish.turnLimit);
       fish.heading += fish.turn * dt;
       let desiredSpeed = fish.targetSpeed;
-      const brakingStrength = Math.max(avoidStrength, environmentStrength);
-      if (brakingStrength > 0.4) desiredSpeed /= 1 + (brakingStrength - 0.4) * (width < 600 ? 4.0 : 8.0);
+      const brakingStrength = Math.max(neighborThreat, environmentAvoid.threat);
+      if (brakingStrength > 0.75) desiredSpeed *= 1 - (brakingStrength - 0.75) / 0.25 * 0.65;
       if (phoneOutward) desiredSpeed = 0;
       const speedChange = clamp(desiredSpeed - fish.speed, -fish.accelerationLimit * dt, fish.accelerationLimit * dt);
       fish.speed = Math.max(0, fish.speed + speedChange);
