@@ -3,6 +3,7 @@
 
   const TAU = Math.PI * 2;
   const ANATOMY_SCALE = 2;
+  const MAX_FISH = 4;
   const HISTORY_SIZE = 480;
   const HISTORY_STEP = 2;
   const MAX_RIPPLES = 14;
@@ -50,6 +51,7 @@
     const water = [];
     const ripples = [];
     const fishes = [];
+    const spawnQueue = [];
     const interfaceBounds = [];
     const pointers = new Map();
     const point = { x: 0, y: 0, a: 0 };
@@ -68,9 +70,6 @@
     let cellOwners = new Int16Array(1);
     let cellPriorities = new Uint8Array(1);
     let uiMask = new Uint8Array(1);
-    let rendererAudit = null;
-    let placementAuditIndex = -1;
-    let placementAuditOwners = new Int16Array(1);
     let background = null;
     let yaw = 0;
     let tilt = 0;
@@ -91,7 +90,10 @@
     let lastTime = 0;
     let elapsed = 0;
     let nextRipple = 2.5;
-    let seed = 9317;
+    let populationTarget = 0;
+    let spawnCount = 0;
+    let exitCount = 0;
+    let seed = (Math.random() * 4294967296) >>> 0;
 
     function random() {
       seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -184,9 +186,12 @@
       this.index = index;
       this.x = 0;
       this.y = 0;
-      this.homeX = 0;
-      this.homeY = 0;
-      this.homeHeading = 0;
+      this.spawnEdge = 'left';
+      this.exitEdge = 'right';
+      this.journeyX = 0;
+      this.journeyY = 0;
+      this.journeyFraction = 0.5;
+      this.hasEntered = false;
       this.heading = 0;
       this.turn = 0;
       this.vx = 0;
@@ -290,11 +295,14 @@
       fish.previousSpeed = speed;
     }
 
+    function updateFishAnatomy(fish) {
+      fish.bodyLength = cellW * 30.5 * fish.scale * ANATOMY_SCALE;
+      fish.tailLength = cellW * 9.0 * fish.scale * ANATOMY_SCALE;
+    }
+
     function initializeFish(fish, x, y, heading) {
       fish.x = x;
       fish.y = y;
-      fish.homeX = x;
-      fish.homeY = y;
       fish.heading = heading;
       fish.turn = 0;
       if (fish.speed <= 0 && fish.state !== 'rest') fish.speed = fish.targetSpeed * 0.65;
@@ -302,8 +310,7 @@
       fish.vy = Math.sin(heading) * fish.speed;
       fish.previousSpeed = fish.speed;
       updateSwimMechanics(fish, 0);
-      fish.bodyLength = cellW * 30.5 * fish.scale * ANATOMY_SCALE;
-      fish.tailLength = cellW * 9.0 * fish.scale * ANATOMY_SCALE;
+      updateFishAnatomy(fish);
       const totalLength = fish.bodyLength + fish.tailLength;
       fish.count = Math.min(HISTORY_SIZE, Math.ceil(totalLength / HISTORY_STEP) + 4);
       fish.head = fish.count - 1;
@@ -405,20 +412,11 @@
     }
 
     function putCell(column, row, character, color, alpha, owner, priority) {
-      if (column < 0 || column >= columns || row < 0 || row >= rows) {
-        if (rendererAudit && owner >= 0) rendererAudit.clear = false;
-        return;
-      }
+      if (column < 0 || column >= columns || row < 0 || row >= rows) return;
       const index = row * columns + column;
-      if (uiMask[index]) {
-        if (rendererAudit && owner >= 0) rendererAudit.clear = false;
-        return;
-      }
+      if (uiMask[index]) return;
       const occupant = cellOwners[index];
-      if (occupant >= 0 && (occupant !== owner || cellPriorities[index] > priority)) {
-        if (rendererAudit && owner >= 0 && occupant !== owner) rendererAudit.clear = false;
-        return;
-      }
+      if (occupant >= 0 && (occupant !== owner || cellPriorities[index] > priority)) return;
       cells[index] = character;
       cellColors[index] = color;
       cellAlphas[index] = alpha;
@@ -492,23 +490,15 @@
       });
     }
 
-    function desiredFishCount() {
-      return width < 1000 || height < 700 ? 1 : 2;
-    }
-
-    function layoutSlot(index) {
-      if (width <= 700 && height >= 700) return { x: width * (width < 600 ? 0.58 : 0.46), y: height * (width < 600 ? 0.30 : 0.36), heading: 4.5 };
-      if (desiredFishCount() === 1) {
-        const x = width * (width <= 700 && height < 550 ? 0.81 : 0.65);
-        const y = height < 550 ? height * (width <= 700 ? 0.445 : 0.44) : (height < 600 ? Math.min(height * 0.5, 260) : (height < 680 ? 230 : height * 0.5));
-        return { x, y, heading: 0 };
-      }
-      if (index === 0) return { x: width * (width < 1100 ? 0.50 : (width < 1440 ? 0.47 : 0.45)), y: height <= 800 ? 260 : 300, heading: 0 };
-      return { x: width - (width >= 1100 && width < 1440 ? 180 : Math.max(150, width * 0.12)), y: height * (width < 1100 ? 0.68 : 0.64), heading: 0 };
+    function safeFishCapacity() {
+      if (width < 760 || height < 560) return 1;
+      if (width < 1000 || height < 700) return 2;
+      if (width < 1280 || height < 800) return 3;
+      return MAX_FISH;
     }
 
     function silhouetteMargin(fish) {
-      return cellW * 12 * fish.scale * ANATOMY_SCALE;
+      return cellW * 16 * fish.scale * ANATOMY_SCALE;
     }
 
     function anatomyRadius(fish, distance) {
@@ -547,88 +537,153 @@
       return points;
     }
 
-    function renderedSchoolClear(count) {
-      const savedYaw = yaw;
-      const savedTilt = tilt;
-      const savedZoom = zoom;
-      yaw = 0;
-      tilt = 0;
-      zoom = 1;
-      rendererAudit = { clear: true };
-      clearGrid();
-      for (let i = 0; i < count; i++) drawFish(fishes[i]);
-      const clear = rendererAudit.clear;
-      rendererAudit = null;
-      clearGrid();
-      yaw = savedYaw;
-      tilt = savedTilt;
-      zoom = savedZoom;
-      return clear;
-    }
-
-    function initialSilhouetteClear(fish) {
-      const savedYaw = yaw;
-      const savedTilt = tilt;
-      const savedZoom = zoom;
-      yaw = 0;
-      tilt = 0;
-      zoom = 1;
-      if (placementAuditIndex !== fish.index) {
-        clearGrid();
-        for (let i = 0; i < fish.index; i++) drawFish(fishes[i]);
-        placementAuditOwners = cellOwners.slice();
-        placementAuditIndex = fish.index;
+    function fullSilhouetteExit(fish) {
+      const points = silhouettePoints(fish);
+      let left = true;
+      let right = true;
+      let top = true;
+      let bottom = true;
+      for (let i = 0; i < points.length; i++) {
+        const sample = points[i];
+        if (sample.x + sample.margin >= 0) left = false;
+        if (sample.x - sample.margin <= width) right = false;
+        if (sample.y + sample.margin >= 0) top = false;
+        if (sample.y - sample.margin <= height) bottom = false;
       }
-      clearGrid();
-      cellOwners.set(placementAuditOwners);
-      rendererAudit = { clear: true };
-      drawFish(fish);
-      const clear = rendererAudit.clear;
-      rendererAudit = null;
-      yaw = savedYaw;
-      tilt = savedTilt;
-      zoom = savedZoom;
-      return clear;
+      if (left) return 'left';
+      if (right) return 'right';
+      if (top) return 'top';
+      if (bottom) return 'bottom';
+      return null;
     }
 
-    function currentSchoolClear() {
-      return renderedSchoolClear(fishes.length);
+    function updateJourneyTarget(fish) {
+      const distance = fish.bodyLength + fish.tailLength + silhouetteMargin(fish) * 2 + cellW * 4;
+      if (fish.exitEdge === 'right') {
+        fish.journeyX = width + distance;
+        fish.journeyY = height * fish.journeyFraction;
+      } else if (fish.exitEdge === 'left') {
+        fish.journeyX = -distance;
+        fish.journeyY = height * fish.journeyFraction;
+      } else if (fish.exitEdge === 'bottom') {
+        fish.journeyX = width * fish.journeyFraction;
+        fish.journeyY = height + distance;
+      } else {
+        fish.journeyX = width * fish.journeyFraction;
+        fish.journeyY = -distance;
+      }
     }
 
-    function placeFish(fish, baseX, baseY, preferredHeading) {
-      placementAuditIndex = -1;
-      initializeFish(fish, baseX, baseY, preferredHeading);
-      for (let attempt = 0; attempt < 96; attempt++) {
-        let x = baseX;
-        let y = baseY;
-        let heading = preferredHeading;
-        if (attempt > 0 && attempt < 32) {
-          x += (random() - 0.5) * Math.min(150, width * 0.16);
-          y += (random() - 0.5) * Math.min(130, height * 0.18);
-          heading += (random() - 0.5) * 2.2;
-        } else if (attempt >= 32) {
-          x = random() * width;
-          y = 64 + random() * Math.max(1, height - 128);
-          heading = random() * TAU;
+    function spawnFish(fish, edge) {
+      updateFishAnatomy(fish);
+      const margin = silhouetteMargin(fish) + cellW;
+      const startFraction = 0.20 + random() * 0.60;
+      fish.journeyFraction = startFraction < 0.5 ? 0.58 + random() * 0.24 : 0.18 + random() * 0.24;
+      fish.spawnEdge = edge;
+      fish.exitEdge = edge === 'left' ? 'right' : (edge === 'right' ? 'left' : (edge === 'top' ? 'bottom' : 'top'));
+      fish.hasEntered = false;
+      let x;
+      let y;
+      if (edge === 'left') {
+        x = -margin;
+        y = height * startFraction;
+      } else if (edge === 'right') {
+        x = width + margin;
+        y = height * startFraction;
+      } else if (edge === 'top') {
+        x = width * startFraction;
+        y = -margin;
+      } else {
+        x = width * startFraction;
+        y = height + margin;
+      }
+      updateJourneyTarget(fish);
+      initializeFish(fish, x, y, Math.atan2(fish.journeyY - y, fish.journeyX - x));
+    }
+
+    function reindexFish() {
+      for (let i = 0; i < fishes.length; i++) fishes[i].index = i;
+    }
+
+    function spawnFromRandomEdge() {
+      if (fishes.length >= Math.min(populationTarget, safeFishCapacity(), MAX_FISH)) return;
+      const edge = ['left', 'right', 'top', 'bottom'][Math.floor(random() * 4)];
+      const fish = new Fish(fishes.length);
+      spawnFish(fish, edge);
+      fishes.push(fish);
+      spawnCount++;
+    }
+
+    function scheduleReplacement() {
+      if (fishes.length + spawnQueue.length >= Math.min(populationTarget, safeFishCapacity(), MAX_FISH)) return;
+      spawnQueue.push({ remaining: 2 + random() * 6 });
+    }
+
+    function updateSpawns(dt) {
+      const limit = Math.min(populationTarget, safeFishCapacity(), MAX_FISH);
+      while (fishes.length + spawnQueue.length < limit) scheduleReplacement();
+      for (let i = spawnQueue.length - 1; i >= 0; i--) {
+        const spawn = spawnQueue[i];
+        spawn.remaining = Math.max(0, spawn.remaining - dt);
+        if (spawn.remaining > 0) continue;
+        spawnQueue.splice(i, 1);
+        if (fishes.length < limit) spawnFromRandomEdge();
+      }
+    }
+
+    function rescaleFishForResize(fish, previousWidth, previousHeight, previousCellW) {
+      const points = new Array(fish.count);
+      for (let i = 0; i < fish.count; i++) {
+        const at = ((fish.head - i + HISTORY_SIZE) % HISTORY_SIZE) * 3;
+        points[i] = {
+          x: fish.history[at],
+          y: fish.history[at + 1],
+          a: fish.history[at + 2]
+        };
+      }
+      const oldX = fish.x;
+      const oldY = fish.y;
+      const nextX = oldX * width / previousWidth;
+      const nextY = oldY * height / previousHeight;
+      const anatomyScale = cellW / previousCellW;
+      updateFishAnatomy(fish);
+      const nextCount = Math.min(HISTORY_SIZE, Math.ceil((fish.bodyLength + fish.tailLength) / HISTORY_STEP) + 4);
+      const oldest = points[points.length - 1];
+      fish.count = nextCount;
+      fish.head = nextCount - 1;
+      for (let i = 0; i < nextCount; i++) {
+        const distanceFromHead = nextCount - 1 - i;
+        let sample;
+        if (distanceFromHead < points.length) {
+          sample = points[distanceFromHead];
+        } else {
+          const extra = distanceFromHead - points.length + 1;
+          sample = {
+            x: oldest.x - Math.cos(oldest.a) * HISTORY_STEP * extra,
+            y: oldest.y - Math.sin(oldest.a) * HISTORY_STEP * extra,
+            a: oldest.a
+          };
         }
-        initializeFish(fish, x, y, heading);
-        if (!initialSilhouetteClear(fish)) continue;
-        return true;
+        const at = i * 3;
+        fish.history[at] = nextX + (sample.x - oldX) * anatomyScale;
+        fish.history[at + 1] = nextY + (sample.y - oldY) * anatomyScale;
+        fish.history[at + 2] = sample.a;
       }
-      if (height < 500) return false;
-      const step = width < 600 ? 4 : cellW * 3;
-      const headings = width < 600 ? 64 : 16;
-      for (let y = step; y < height; y += step) {
-        for (let x = step; x < width; x += step) {
-          for (let i = 0; i < headings; i++) {
-            const heading = preferredHeading + i * TAU / headings;
-            initializeFish(fish, x, y, heading);
-            if (!initialSilhouetteClear(fish)) continue;
-            return true;
-          }
-        }
+      fish.x = nextX;
+      fish.y = nextY;
+      updateJourneyTarget(fish);
+    }
+
+    function trimPopulationToCapacity() {
+      populationTarget = Math.min(populationTarget, safeFishCapacity(), MAX_FISH);
+      while (spawnQueue.length > 0 && fishes.length + spawnQueue.length > populationTarget) spawnQueue.pop();
+      let removed = false;
+      for (let i = fishes.length - 1; i >= 0 && fishes.length + spawnQueue.length > populationTarget; i--) {
+        if (fullSilhouetteExit(fishes[i]) === null) continue;
+        fishes.splice(i, 1);
+        removed = true;
       }
-      return false;
+      if (removed) reindexFish();
     }
 
     function refreshBackingStore(nextDpr) {
@@ -646,7 +701,6 @@
       const previousWidth = width;
       const previousHeight = height;
       const previousCellW = cellW;
-      const previousCellH = cellH;
       width = Math.max(1, window.innerWidth);
       height = Math.max(1, window.innerHeight);
       dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
@@ -672,63 +726,12 @@
       populateWater();
       ripples.length = 0;
 
-      const count = desiredFishCount();
-      const preservePausedLayout = paused && fishes.length === count && count > 0
-        && previousCellW === cellW && previousCellH === cellH;
-      const minorResize = Math.abs(width - previousWidth) <= cellW && Math.abs(height - previousHeight) <= cellH;
-      if (preservePausedLayout && (minorResize || currentSchoolClear())) {
-        draw();
-        return;
-      }
-      fishes.length = Math.min(fishes.length, count);
-      while (fishes.length < count) fishes.push(new Fish(fishes.length));
-      const pausedStates = paused ? fishes.map((fish) => ({
-        fish,
-        heading: fish.heading,
-        turn: fish.turn,
-        vx: fish.vx,
-        vy: fish.vy,
-        speed: fish.speed,
-        previousSpeed: fish.previousSpeed,
-        acceleration: fish.acceleration,
-        state: fish.state,
-        stateTimer: fish.stateTimer,
-        targetSpeed: fish.targetSpeed,
-        accelerationLimit: fish.accelerationLimit,
-        turnLimit: fish.turnLimit,
-        targetTurn: fish.targetTurn,
-        tailPhase: fish.tailPhase,
-        tailFrequency: fish.tailFrequency,
-        tailAmplitude: fish.tailAmplitude,
-        finBrake: fish.finBrake,
-        bank: fish.bank
-      })) : [];
-      let reflows = 0;
-      while (fishes.length > 0) {
-        let placed = true;
-        for (let i = 0; i < fishes.length; i++) {
-          const fish = fishes[i];
-          const slot = layoutSlot(i);
-          const heading = pausedStates[i] ? pausedStates[i].heading : slot.heading;
-          initializeFish(fish, 0, 0, heading);
-          if (!placeFish(fish, slot.x, slot.y, heading)) {
-            placed = false;
-            break;
-          }
-          fish.homeHeading = fish.heading - (width < 600 ? 0.05 : 0);
-          if (width < 600) fish.tailPhase += 1;
-          const state = pausedStates[i];
-          if (state) {
-            const fields = Object.keys(state);
-            for (let j = 1; j < fields.length; j++) fish[fields[j]] = state[fields[j]];
-          }
-        }
-        if (placed) break;
-        reflows++;
-        if (reflows >= 2) {
-          fishes.length--;
-          reflows = 0;
-        }
+      if (populationTarget === 0) {
+        populationTarget = 1 + Math.floor(random() * safeFishCapacity());
+        while (fishes.length < populationTarget) spawnFromRandomEdge();
+      } else {
+        for (let i = 0; i < fishes.length; i++) rescaleFishForResize(fishes[i], previousWidth, previousHeight, previousCellW);
+        trimPopulationToCapacity();
       }
       draw();
     }
@@ -1017,10 +1020,6 @@
     }
 
     function drawFish(fish) {
-      if (rendererAudit) {
-        auditFish(fish);
-        return;
-      }
       drawTail(fish);
       drawFins(fish);
       drawBody(fish);
@@ -1145,7 +1144,6 @@
 
     function addEnvironmentAvoidance(fish, x, y, weight, avoid, margin) {
       const influence = Math.max(90, cellW * 14);
-      const edgePadding = width < 600 ? 32 : 64;
       const forwardX = Math.cos(fish.heading);
       const forwardY = Math.sin(fish.heading);
 
@@ -1160,11 +1158,6 @@
         const closing = clamp(-(forwardX * nx + forwardY * ny), 0, 1);
         avoid.threat = Math.max(avoid.threat, proximity * closing);
       }
-
-      pressure(1, 0, x - margin);
-      pressure(-1, 0, width - margin - x);
-      pressure(0, 1, y - edgePadding - margin);
-      pressure(0, -1, height - edgePadding - margin - y);
 
       for (let i = 0; i < interfaceBounds.length; i++) {
         const rect = interfaceBounds[i];
@@ -1200,23 +1193,26 @@
       const totalLength = fish.bodyLength + fish.tailLength;
       const avoid = { x: 0, y: 0 };
       const environmentAvoid = { x: 0, y: 0, threat: 0 };
-      for (let i = 0; i <= 10; i++) {
-        const distance = totalLength * i / 10;
-        spineAt(fish, distance, point);
-        addEnvironmentAvoidance(fish, point.x, point.y, i === 0 ? 1.2 : 0.58, environmentAvoid, anatomyRadius(fish, distance));
+      const headOutside = fish.x < 0 || fish.x > width || fish.y < 0 || fish.y > height;
+      if (!headOutside) {
+        for (let i = 0; i <= 10; i++) {
+          const distance = totalLength * i / 10;
+          spineAt(fish, distance, point);
+          addEnvironmentAvoidance(fish, point.x, point.y, i === 0 ? 1.2 : 0.58, environmentAvoid, anatomyRadius(fish, distance));
+        }
+        spineAt(fish, 0, point);
+        const lookAhead = Math.min(totalLength * 0.55, Math.max(36, fish.speed * 1.4));
+        addEnvironmentAvoidance(
+          fish,
+          point.x + Math.cos(fish.heading) * lookAhead,
+          point.y + Math.sin(fish.heading) * lookAhead,
+          1.5,
+          environmentAvoid,
+          anatomyRadius(fish, 0)
+        );
+        avoid.x += environmentAvoid.x;
+        avoid.y += environmentAvoid.y;
       }
-      spineAt(fish, 0, point);
-      const lookAhead = Math.min(totalLength * 0.55, Math.max(36, fish.speed * 1.4));
-      addEnvironmentAvoidance(
-        fish,
-        point.x + Math.cos(fish.heading) * lookAhead,
-        point.y + Math.sin(fish.heading) * lookAhead,
-        1.5,
-        environmentAvoid,
-        anatomyRadius(fish, 0)
-      );
-      avoid.x += environmentAvoid.x;
-      avoid.y += environmentAvoid.y;
       let alignmentX = 0;
       let alignmentY = 0;
       let cohesionX = 0;
@@ -1298,36 +1294,9 @@
         const avoidStrength = Math.min(2.4, Math.sqrt(avoid.x * avoid.x + avoid.y * avoid.y));
         targetTurn += difference * avoidStrength;
       }
-      let phoneOutward = false;
-      if (width < 600) {
-        const margin = silhouetteMargin(fish);
-        const buffer = cellW * 3;
-        const forwardX = Math.cos(fish.heading);
-        const forwardY = Math.sin(fish.heading);
-        phoneOutward = (fish.x < margin + buffer && forwardX < 0)
-          || (fish.x > width - margin - buffer && forwardX > 0)
-          || (fish.y < 32 + margin + buffer && forwardY < 0)
-          || (fish.y > height - 32 - margin - buffer && forwardY > 0);
-        if (phoneOutward) {
-          const inward = Math.atan2(height * 0.5 - fish.y, width * 0.5 - fish.x);
-          targetTurn = angleDelta(inward, fish.heading) * 2;
-        }
-      }
-      const homeX = fish.homeX - fish.x;
-      const homeY = fish.homeY - fish.y;
-      const homeDistance = Math.hypot(homeX, homeY);
-      const homeRange = totalLength * (fishes.length === 1 ? 0.02 : 0.04);
-      if (homeDistance > homeRange) {
-        const desired = Math.atan2(homeY, homeX);
-        targetTurn += angleDelta(desired, fish.heading) * clamp((homeDistance - homeRange) / homeRange, 0, 1.5) * 4.0;
-      }
-      if (fishes.length === 1) {
-        if (homeDistance > homeRange) {
-          targetTurn = angleDelta(Math.atan2(homeY, homeX), fish.heading) * 4;
-        } else {
-          targetTurn = angleDelta(fish.homeHeading, fish.heading) * (width < 600 ? 1.0 : 0.5);
-        }
-      }
+      const journeyHeading = Math.atan2(fish.journeyY - fish.y, fish.journeyX - fish.x);
+      const journeyWeight = headOutside ? 2.2 : (fish.state === 'dart' ? 0.45 : 0.85);
+      targetTurn += angleDelta(journeyHeading, fish.heading) * journeyWeight;
       fish.targetTurn = clamp(targetTurn, -fish.turnLimit, fish.turnLimit);
       const turnBlend = 1 - Math.exp(-dt * 4.2 / fish.temperament.reaction);
       fish.turn += (fish.targetTurn - fish.turn) * turnBlend;
@@ -1336,7 +1305,6 @@
       let desiredSpeed = fish.targetSpeed;
       const brakingStrength = Math.max(neighborThreat, environmentAvoid.threat);
       if (brakingStrength > 0.75) desiredSpeed *= 1 - (brakingStrength - 0.75) / 0.25 * 0.65;
-      if (phoneOutward) desiredSpeed = 0;
       const speedChange = clamp(desiredSpeed - fish.speed, -fish.accelerationLimit * dt, fish.accelerationLimit * dt);
       fish.speed = Math.max(0, fish.speed + speedChange);
       fish.vx = Math.cos(fish.heading) * fish.speed;
@@ -1374,7 +1342,21 @@
       if (paused) return;
       updateCamera(dt);
       elapsed += dt;
-      for (let i = 0; i < fishes.length; i++) steer(fishes[i], dt);
+      let departed = false;
+      for (let i = fishes.length - 1; i >= 0; i--) {
+        const fish = fishes[i];
+        steer(fish, dt);
+        const exitEdge = fullSilhouetteExit(fish);
+        if (exitEdge === null) {
+          fish.hasEntered = true;
+        } else if (fish.hasEntered && exitEdge === fish.exitEdge) {
+          fishes.splice(i, 1);
+          exitCount++;
+          departed = true;
+        }
+      }
+      if (departed) reindexFish();
+      updateSpawns(dt);
       nextRipple -= dt;
       if (nextRipple <= 0) {
         addRipple(random() * width, random() * height, 0.45);
@@ -1615,6 +1597,18 @@
     window.koiPond = {
       get paused() { return paused; },
       get fishCount() { return fishes.length; },
+      get activeCount() { return fishes.length; },
+      get visibleFishCount() {
+        let count = 0;
+        for (let i = 0; i < fishes.length; i++) if (fullSilhouetteExit(fishes[i]) === null) count++;
+        return count;
+      },
+      get safeCapacity() { return safeFishCapacity(); },
+      get populationTarget() { return populationTarget; },
+      get pendingSpawnCount() { return spawnQueue.length; },
+      get spawnTimers() { return spawnQueue.map((spawn) => ({ remaining: spawn.remaining })); },
+      get spawnCount() { return spawnCount; },
+      get exitCount() { return exitCount; },
       get frame() { return frame; },
       get fontSize() { return fontSize; },
       get columns() { return columns; },
@@ -1638,6 +1632,15 @@
           y: fish.y,
           heading: fish.heading,
           turn: fish.turn,
+          scale: fish.scale,
+          bodyLength: fish.bodyLength,
+          tailLength: fish.tailLength,
+          spawnEdge: fish.spawnEdge,
+          exitEdge: fish.exitEdge,
+          journeyX: fish.journeyX,
+          journeyY: fish.journeyY,
+          hasEntered: fish.hasEntered,
+          outside: fullSilhouetteExit(fish),
           tailFrequency: fish.tailFrequency,
           finBrake: fish.finBrake,
           bank: fish.bank,
