@@ -480,18 +480,18 @@
     }
 
     function desiredFishCount() {
-      return width <= 700 ? 1 : 2;
+      return width < 1000 || height < 700 ? 1 : 2;
     }
 
     function layoutSlot(index) {
-      if (width <= 700) return { x: width * (width < 600 ? 0.58 : 0.46), y: height * (width < 600 ? 0.30 : 0.36), heading: 4.5 };
+      if (width <= 700 && height >= 700) return { x: width * (width < 600 ? 0.58 : 0.46), y: height * (width < 600 ? 0.30 : 0.36), heading: 4.5 };
+      if (desiredFishCount() === 1) {
+        const x = width * (width <= 700 && height < 550 ? 0.81 : 0.65);
+        const y = height < 550 ? height * (width <= 700 ? 0.445 : 0.44) : (height < 600 ? Math.min(height * 0.5, 260) : (height < 680 ? 230 : height * 0.5));
+        return { x, y, heading: 0 };
+      }
       if (index === 0) return { x: width * (width < 1100 ? 0.50 : (width < 1440 ? 0.47 : 0.45)), y: height <= 800 ? 260 : 300, heading: 0 };
       return { x: width - (width >= 1100 && width < 1440 ? 180 : Math.max(150, width * 0.12)), y: height * (width < 1100 ? 0.68 : 0.64), heading: 0 };
-    }
-
-    function motionHome(index) {
-      const slot = layoutSlot(index);
-      return { x: slot.x, y: slot.y };
     }
 
     function silhouetteMargin(fish) {
@@ -691,10 +691,7 @@
             placed = false;
             break;
           }
-          const home = motionHome(i);
-          fish.homeX = home.x;
-          fish.homeY = home.y;
-          fish.homeHeading = slot.heading - (width < 600 ? 0.05 : 0);
+          fish.homeHeading = fish.heading - (width < 600 ? 0.05 : 0);
           if (width < 600) fish.tailPhase += 1;
           const state = pausedStates[i];
           if (state) {
@@ -1295,12 +1292,12 @@
       const homeX = fish.homeX - fish.x;
       const homeY = fish.homeY - fish.y;
       const homeDistance = Math.hypot(homeX, homeY);
-      const homeRange = totalLength * (width <= 700 ? 0.02 : 0.04);
+      const homeRange = totalLength * (fishes.length === 1 ? 0.02 : 0.04);
       if (homeDistance > homeRange) {
         const desired = Math.atan2(homeY, homeX);
         targetTurn += angleDelta(desired, fish.heading) * clamp((homeDistance - homeRange) / homeRange, 0, 1.5) * 4.0;
       }
-      if (width <= 700) {
+      if (fishes.length === 1) {
         if (homeDistance > homeRange) {
           targetTurn = angleDelta(Math.atan2(homeY, homeX), fish.heading) * 4;
         } else {
