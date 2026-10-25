@@ -516,6 +516,26 @@ body:not([data-exhibit="sculpture"]) #morph-toggle {
   }
 }
 
+@media (max-height: 450px) and (max-width: 700px) {
+  #koi-caption,
+  #sculpture-caption {
+    top: 120px;
+    bottom: auto;
+  }
+
+  h1 {
+    font-size: 64px;
+  }
+
+  #sculpture-title {
+    font-size: 52px;
+  }
+
+  .exhibit-description {
+    display: none;
+  }
+}
+
 @media (max-height: 590px) and (min-width: 701px) {
   .exhibit-caption {
     bottom: 88px;

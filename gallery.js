@@ -20,6 +20,7 @@
     const changed = current !== id;
     current = id;
     document.body.dataset.exhibit = id;
+    document.title = (id === 'sculpture' ? 'Sculpture' : 'Koi') + ' — Frontend Art';
     for (const panel of panels) panel.hidden = panel.dataset.galleryExhibit !== id;
     for (const link of links) {
       if (link.dataset.galleryLink === id) link.setAttribute('aria-current', 'true');

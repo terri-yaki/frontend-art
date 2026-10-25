@@ -399,15 +399,25 @@
     }
 
     function updateFormLabel() {
+      const animatedTransition = morphing && !paused && !motionQuery.matches;
       if (formLabel) {
         formLabel.textContent = morphing
           ? FORM_NAMES[morphFrom] + ' → ' + FORM_NAMES[morphTo]
           : String(currentForm + 1).padStart(2, '0') + ' / ' + FORM_NAMES[currentForm];
       }
       if (morphButton) {
-        const next = ((morphing ? morphTo : currentForm) + 1) % FORM_NAMES.length;
-        morphButton.setAttribute('aria-label', 'Morph to ' + FORM_NAMES[next]);
-        morphButton.title = 'Morph to ' + FORM_NAMES[next] + ' (M)';
+        const morphLabel = morphButton.querySelector('.control-label');
+        morphButton.disabled = animatedTransition;
+        if (morphLabel) morphLabel.textContent = animatedTransition ? 'Morphing' : 'Morph';
+        if (animatedTransition) {
+          const transition = 'Morphing ' + FORM_NAMES[morphFrom] + ' to ' + FORM_NAMES[morphTo];
+          morphButton.setAttribute('aria-label', transition);
+          morphButton.title = transition;
+        } else {
+          const next = ((morphing ? morphTo : currentForm) + 1) % FORM_NAMES.length;
+          morphButton.setAttribute('aria-label', 'Morph to ' + FORM_NAMES[next]);
+          morphButton.title = 'Morph to ' + FORM_NAMES[next] + ' (M)';
+        }
       }
     }
 
@@ -465,6 +475,7 @@
       paused = value;
       lastTime = 0;
       updateButton();
+      updateFormLabel();
       syncAnimation();
     }
 
