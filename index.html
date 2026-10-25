@@ -11,25 +11,41 @@
     <title>Koi — Frontend Art</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23f6f3ec'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='42' fill='%23c96342'%3E*%3C/text%3E%3C/svg%3E" />
     <link rel="stylesheet" href="styles.css" />
+    <script src="gallery.js" defer></script>
     <script src="script.js" defer></script>
   </head>
-  <body>
-    <canvas id="pond" aria-hidden="true"></canvas>
-    <div class="water-shade" aria-hidden="true"></div>
-
+  <body data-exhibit="koi">
     <header class="site-header">
       <a class="wordmark" href="./" aria-label="Frontend Art home">
         <span>frontend</span><span class="wordmark-slash">/</span><span>art</span>
       </a>
-      <p class="collection-note">An evolving collection<br />of digital studies</p>
+      <div class="header-center">
+        <nav class="exhibit-nav" aria-label="Exhibits">
+          <a href="#koi" data-gallery-link="koi" aria-current="true"><span>001</span> Koi</a>
+          <a href="#sculpture" data-gallery-link="sculpture"><span>002</span> Sculpture</a>
+        </nav>
+        <p class="collection-note">An evolving collection<br />of digital studies</p>
+      </div>
       <p class="edition">Vol. 01 <span aria-hidden="true">↗</span> 2026</p>
     </header>
 
     <main id="exhibit">
-      <section class="exhibit-caption" aria-labelledby="exhibit-title">
-        <p class="eyebrow"><span>001</span> ASCII animation</p>
-        <h1 id="exhibit-title">Koi<span class="title-mark" aria-hidden="true">*</span></h1>
-        <p class="exhibit-description">A quiet choreography<br />of code and current.</p>
+      <section id="koi" class="exhibit-panel" data-gallery-exhibit="koi" aria-labelledby="koi-title">
+        <canvas id="pond" aria-hidden="true"></canvas>
+        <div class="water-shade" aria-hidden="true"></div>
+        <div id="koi-caption" class="exhibit-caption">
+          <p class="eyebrow"><span>001</span> ASCII animation</p>
+          <h1 id="koi-title">Koi<span class="title-mark" aria-hidden="true">*</span></h1>
+          <p class="exhibit-description">A quiet choreography<br />of code and current.</p>
+        </div>
+      </section>
+      <section id="sculpture" class="exhibit-panel" data-gallery-exhibit="sculpture" aria-labelledby="sculpture-title" hidden>
+        <canvas id="sculpture-canvas" aria-hidden="true"></canvas>
+        <div id="sculpture-caption" class="exhibit-caption">
+          <p class="eyebrow"><span>002</span> ASCII sculpture</p>
+          <h1 id="sculpture-title">Sculpture<span class="title-mark" aria-hidden="true">*</span></h1>
+          <p class="exhibit-description">Form, light and depth<br />in a living character field.</p>
+        </div>
       </section>
     </main>
 

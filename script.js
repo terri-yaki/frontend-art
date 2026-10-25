@@ -26,7 +26,8 @@
     const canvas = document.getElementById('pond');
     const button = document.getElementById('motion-toggle');
     const resetButton = document.getElementById('view-reset');
-    if (!canvas || !button) return;
+    const gallery = window.frontendGallery;
+    if (!canvas || !button || !gallery) return;
 
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
@@ -34,6 +35,18 @@
     const label = button.querySelector('.control-label');
     const icon = button.querySelector('.control-icon');
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const addWindowListener = window.addEventListener.bind(window);
+
+    function isActive() {
+      return gallery.is('koi');
+    }
+
+    function listenActive(type, listener, options) {
+      addWindowListener(type, (event) => {
+        if (isActive()) listener(event);
+      }, options);
+    }
+
     const water = [];
     const ripples = [];
     const fishes = [];
@@ -364,7 +377,7 @@
     function maskInterface() {
       uiMask.fill(0);
       interfaceBounds.length = 0;
-      const elements = document.querySelectorAll('.site-header > *, .exhibit-caption, .site-footer > *');
+      const elements = document.querySelectorAll('.site-header > *, #koi-caption, .site-footer > *');
       for (let i = 0; i < elements.length; i++) {
         const rect = elements[i].getBoundingClientRect();
         const paddingX = cellW * 2;
@@ -1324,6 +1337,7 @@
     }
 
     function updateButton() {
+      if (!isActive()) return;
       if (label) label.textContent = paused ? 'Resume motion' : 'Pause motion';
       if (icon) icon.textContent = paused ? '▶' : 'Ⅱ';
     }
@@ -1334,12 +1348,15 @@
       updateButton();
     }
 
+    let animationRequest = null;
+
     function animate(now) {
-      requestAnimationFrame(animate);
-      if (document.hidden) {
+      animationRequest = null;
+      if (!isActive() || document.hidden) {
         lastTime = 0;
         return;
       }
+      animationRequest = requestAnimationFrame(animate);
       if (!lastTime) lastTime = now;
       const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
       lastTime = now;
@@ -1356,7 +1373,21 @@
       frame++;
     }
 
+    function syncAnimation() {
+      if (!isActive() || document.hidden) {
+        if (animationRequest !== null) cancelAnimationFrame(animationRequest);
+        animationRequest = null;
+        lastTime = 0;
+        return;
+      }
+      if (animationRequest === null) {
+        lastTime = 0;
+        animationRequest = requestAnimationFrame(animate);
+      }
+    }
+
     button.addEventListener('click', () => {
+      if (!isActive()) return;
       pausedByVisibility = false;
       setPaused(!paused);
     });
@@ -1407,7 +1438,7 @@
       document.body.style.cursor = 'grab';
     }
 
-    window.addEventListener('pointerdown', (event) => {
+    listenActive('pointerdown', (event) => {
       if (event.button !== 0 || isInterfaceTarget(event.target)) return;
       event.preventDefault();
       const focused = document.activeElement;
@@ -1437,7 +1468,7 @@
       rebaseGesture(event.timeStamp);
     }, { passive: false });
 
-    window.addEventListener('pointermove', (event) => {
+    listenActive('pointermove', (event) => {
       const pointer = pointers.get(event.pointerId);
       if (!pointer) return;
       event.preventDefault();
@@ -1472,7 +1503,7 @@
       renderPausedCamera();
     }, { passive: false });
 
-    window.addEventListener('pointerup', (event) => {
+    listenActive('pointerup', (event) => {
       const pointer = pointers.get(event.pointerId);
       if (!pointer) return;
       const wasClick = pointers.size === 1 && !pointer.moved && !gestureHadMultiple;
@@ -1493,7 +1524,7 @@
       }
     });
 
-    window.addEventListener('pointercancel', (event) => {
+    listenActive('pointercancel', (event) => {
       if (!pointers.has(event.pointerId)) return;
       pointers.delete(event.pointerId);
       releaseCapture(event.pointerId);
@@ -1507,7 +1538,7 @@
       }
     });
 
-    window.addEventListener('wheel', (event) => {
+    listenActive('wheel', (event) => {
       if (isInterfaceTarget(event.target)) return;
       event.preventDefault();
       const unit = event.deltaMode === 1 ? 16 : (event.deltaMode === 2 ? height : 1);
@@ -1515,13 +1546,13 @@
       renderPausedCamera();
     }, { passive: false });
 
-    window.addEventListener('dblclick', (event) => {
+    listenActive('dblclick', (event) => {
       if (isInterfaceTarget(event.target)) return;
       event.preventDefault();
       resetCamera();
     });
 
-    window.addEventListener('keydown', (event) => {
+    listenActive('keydown', (event) => {
       if (event.altKey || event.ctrlKey || event.metaKey || isInterfaceTarget(event.target)) return;
       let handled = true;
       if (event.key === 'ArrowLeft') targetYaw -= 0.12;
@@ -1538,7 +1569,11 @@
       }
     });
 
-    if (resetButton) resetButton.addEventListener('click', resetCamera);
+    if (resetButton) {
+      resetButton.addEventListener('click', () => {
+        if (isActive()) resetCamera();
+      });
+    }
     canvas.style.touchAction = 'none';
     document.body.style.touchAction = 'none';
     document.body.style.cursor = 'grab';
@@ -1551,6 +1586,7 @@
         pausedByVisibility = false;
         setPaused(false);
       }
+      syncAnimation();
     });
 
     function motionPreferenceChanged(event) {
@@ -1564,7 +1600,7 @@
       motionQuery.addListener(motionPreferenceChanged);
     }
 
-    window.addEventListener('resize', resize, { passive: true });
+    listenActive('resize', resize, { passive: true });
     window.koiPond = {
       get paused() { return paused; },
       get fishCount() { return fishes.length; },
@@ -1613,7 +1649,24 @@
 
     updateButton();
     resize();
-    requestAnimationFrame(animate);
+    gallery.subscribe((id) => {
+      if (id === 'koi') {
+        updateButton();
+        if (width !== window.innerWidth || height !== window.innerHeight) {
+          resize();
+        } else {
+          maskInterface();
+          draw();
+        }
+      } else {
+        for (const pointerId of pointers.keys()) releaseCapture(pointerId);
+        pointers.clear();
+        gestureHadMultiple = false;
+        endGesture(false);
+      }
+      syncAnimation();
+    });
+    syncAnimation();
   }
 
   if (document.readyState === 'loading') {
