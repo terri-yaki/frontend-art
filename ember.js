@@ -494,8 +494,11 @@
       button.setAttribute('aria-label', text);
     }
 
-    function setPaused(value) {
+    let manuallyPaused = false;
+
+    function setPaused(value, manual = true) {
       paused = Boolean(value);
+      if (manual) manuallyPaused = paused;
       lastTime = 0;
       updateButton();
       syncAnimation();
@@ -552,8 +555,10 @@
     }, { passive: false });
 
     listenActive('keydown', (event) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target) || isInterfaceTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
       const space = event.key === ' ' || event.key === 'Spacebar';
+      const nativeActivation = event.key === 'Enter' || space;
+      if (nativeActivation && isInterfaceTarget(event.target)) return;
       if (event.repeat && space) return;
       let handled = true;
       if (event.key === 'b' || event.key === 'B' || event.key === 'Enter') {
@@ -577,7 +582,8 @@
     document.addEventListener('visibilitychange', syncAnimation);
 
     function motionPreferenceChanged(event) {
-      setPaused(event.matches);
+      if (event.matches) setPaused(true, false);
+      else if (!manuallyPaused) setPaused(false, false);
     }
 
     if (motionQuery.addEventListener) motionQuery.addEventListener('change', motionPreferenceChanged);
