@@ -478,6 +478,10 @@
       return target instanceof Element && target.closest('button, a, input, select, textarea, [role="button"], [contenteditable="true"]');
     }
 
+    function isEditableTarget(target) {
+      return target instanceof Element && target.closest('input, select, textarea, [role="textbox"], [contenteditable="true"]');
+    }
+
     function releaseCapture(pointerId) {
       try {
         if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
@@ -489,7 +493,7 @@
     function endGesture() {
       activePointer = null;
       dragging = false;
-      document.body.style.cursor = 'grab';
+      document.body.classList.remove('is-dragging');
     }
 
     function cancelGesture() {
@@ -530,7 +534,7 @@
       if (!activePointer.moved && distance < threshold) return;
       activePointer.moved = true;
       dragging = true;
-      document.body.style.cursor = 'grabbing';
+      document.body.classList.add('is-dragging');
       targetYaw += dx * 0.008;
       targetPitch = clamp(targetPitch + dy * 0.006, -MAX_PITCH, MAX_PITCH);
       renderPausedCamera();
@@ -548,9 +552,11 @@
     listenActive('pointercancel', (event) => finishPointer(event, false));
 
     listenActive('keydown', (event) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || isInterfaceTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
       const space = event.key === ' ' || event.key === 'Spacebar';
       const paletteKey = event.key === 'c' || event.key === 'C' || event.key === 'Enter';
+      const nativeActivation = space || event.key === 'Enter';
+      if (nativeActivation && isInterfaceTarget(event.target)) return;
       if (event.repeat && (space || paletteKey)) return;
       let handled = true;
       if (event.key === 'ArrowLeft') targetYaw -= 0.12;
