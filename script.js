@@ -438,6 +438,11 @@
 
     function populateWater() {
       water.length = 0;
+      let textureSeed = 0x9e3779b9;
+      function textureRandom() {
+        textureSeed = (textureSeed * 1664525 + 1013904223) >>> 0;
+        return textureSeed / 4294967296;
+      }
       const networks = Math.max(12, Math.min(30, Math.floor(columns * rows / 1250)));
       for (let layerIndex = 0; layerIndex < 2; layerIndex++) {
         const marks = [];
@@ -456,6 +461,40 @@
               shade: random()
             });
             angle += (random() - 0.5) * 0.85;
+            x += Math.cos(angle) * 1.25;
+            y += Math.sin(angle) * 0.85;
+          }
+          const extension = 3 + Math.floor(textureRandom() * 4);
+          for (let segment = 0; segment < extension; segment++) {
+            const choice = textureRandom();
+            marks.push({
+              x: Math.round(x) * cellW,
+              y: Math.round(y) * cellH,
+              glyph: choice < 0.56 ? '-' : (choice < 0.82 ? '~' : '.'),
+              phase: textureRandom() * TAU,
+              shade: textureRandom()
+            });
+            angle += (textureRandom() - 0.5) * 0.85;
+            x += Math.cos(angle) * 1.25;
+            y += Math.sin(angle) * 0.85;
+          }
+        }
+        const extraNetworks = Math.max(4, Math.ceil(networks * 0.55));
+        for (let network = 0; network < extraNetworks; network++) {
+          let x = textureRandom() * columns;
+          let y = textureRandom() * rows;
+          let angle = textureRandom() * TAU;
+          const length = 7 + Math.floor(textureRandom() * 7);
+          for (let segment = 0; segment < length; segment++) {
+            const choice = textureRandom();
+            marks.push({
+              x: Math.round(x) * cellW,
+              y: Math.round(y) * cellH,
+              glyph: choice < 0.56 ? '-' : (choice < 0.82 ? '~' : '.'),
+              phase: textureRandom() * TAU,
+              shade: textureRandom()
+            });
+            angle += (textureRandom() - 0.5) * 0.85;
             x += Math.cos(angle) * 1.25;
             y += Math.sin(angle) * 0.85;
           }
@@ -479,6 +518,16 @@
           glyph: random() < 0.78 ? '.' : "'",
           phase: random() * TAU,
           shade: random()
+        });
+      }
+      const extraCount = Math.min(110, Math.floor(columns * rows / 220));
+      for (let i = 0; i < extraCount; i++) {
+        marks.push({
+          x: Math.floor(textureRandom() * columns) * cellW,
+          y: Math.floor(textureRandom() * rows) * cellH,
+          glyph: textureRandom() < 0.78 ? '.' : "'",
+          phase: textureRandom() * TAU,
+          shade: textureRandom()
         });
       }
       water.push({
@@ -1060,8 +1109,8 @@
         project(x, y, 0, screenPoint);
         let glyph = mark.glyph;
         if (wave > 0.58) glyph = layer.kind === 'caustics' && glyph === '-' ? '~' : (glyph === '.' ? "'" : glyph);
-        const alpha = (layer.kind === 'caustics' ? 0.10 : 0.085) + mark.shade * 0.07 + wave * 0.015;
-        putWater(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), glyph, layer.kind === 'caustics' ? '#93a3a5' : '#9ba7a5', alpha);
+        const alpha = (layer.kind === 'caustics' ? 0.20 : 0.17) + mark.shade * (layer.kind === 'caustics' ? 0.10 : 0.08) + wave * 0.018;
+        putWater(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), glyph, layer.kind === 'caustics' ? '#788f94' : '#849795', alpha);
       }
     }
 
