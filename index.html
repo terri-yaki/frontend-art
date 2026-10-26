@@ -14,6 +14,11 @@
     <script src="gallery.js" defer></script>
     <script src="script.js" defer></script>
     <script src="sculpture.js" defer></script>
+    <script src="neon-flow.js" defer></script>
+    <script src="solar-bloom.js" defer></script>
+    <script src="data-rain.js" defer></script>
+    <script src="ember.js" defer></script>
+    <script src="prism.js" defer></script>
   </head>
   <body data-exhibit="koi">
     <header class="site-header">
@@ -22,8 +27,13 @@
       </a>
       <div class="header-center">
         <nav class="exhibit-nav" aria-label="Exhibits">
-          <a href="#koi" data-gallery-link="koi" aria-current="true"><span>001</span> Koi</a>
-          <a href="#sculpture" data-gallery-link="sculpture"><span>002</span> Sculpture</a>
+          <a href="#koi" data-gallery-link="koi" aria-label="001 Koi" aria-current="true"><span class="nav-number">001</span><span class="nav-label">Koi</span></a>
+          <a href="#sculpture" data-gallery-link="sculpture" aria-label="002 Sculpture"><span class="nav-number">002</span><span class="nav-label">Sculpture</span></a>
+          <a href="#neon" data-gallery-link="neon" aria-label="003 Neon Flow"><span class="nav-number">003</span><span class="nav-label">Neon Flow</span></a>
+          <a href="#bloom" data-gallery-link="bloom" aria-label="004 Solar Bloom"><span class="nav-number">004</span><span class="nav-label">Solar Bloom</span></a>
+          <a href="#rain" data-gallery-link="rain" aria-label="005 Data Rain"><span class="nav-number">005</span><span class="nav-label">Data Rain</span></a>
+          <a href="#ember" data-gallery-link="ember" aria-label="006 Ember"><span class="nav-number">006</span><span class="nav-label">Ember</span></a>
+          <a href="#prism" data-gallery-link="prism" aria-label="007 Prism"><span class="nav-number">007</span><span class="nav-label">Prism</span></a>
         </nav>
         <p class="collection-note">An evolving collection<br />of digital studies</p>
       </div>
@@ -36,7 +46,7 @@
         <div class="water-shade" aria-hidden="true"></div>
         <div id="koi-caption" class="exhibit-caption">
           <p class="eyebrow"><span>001</span> ASCII animation</p>
-          <h1 id="koi-title">Koi<span class="title-mark" aria-hidden="true">*</span></h1>
+          <h1 id="koi-title"><span data-gallery-title>Koi</span><span class="title-mark" aria-hidden="true">*</span></h1>
           <p class="exhibit-description">Koi swimming across<br />a field of characters.</p>
         </div>
       </section>
@@ -44,9 +54,54 @@
         <canvas id="sculpture-canvas" aria-hidden="true"></canvas>
         <div id="sculpture-caption" class="exhibit-caption">
           <p class="eyebrow"><span>002</span> ASCII sculpture</p>
-          <h1 id="sculpture-title">Sculpture<span class="title-mark" aria-hidden="true">*</span></h1>
+          <h1 id="sculpture-title"><span data-gallery-title>Sculpture</span><span class="title-mark" aria-hidden="true">*</span></h1>
           <p class="exhibit-description">Form, light and depth<br />in a living character field.</p>
           <p id="sculpture-form" class="sculpture-form">01 / Orb</p>
+        </div>
+      </section>
+      <section id="neon" class="exhibit-panel" data-gallery-exhibit="neon" aria-labelledby="neon-title" hidden>
+        <canvas id="neon-canvas" aria-hidden="true"></canvas>
+        <div id="neon-caption" class="exhibit-caption">
+          <p class="eyebrow"><span>003</span> Particle flow</p>
+          <h1 id="neon-title"><span data-gallery-title>Neon Flow</span><span class="title-mark" aria-hidden="true">*</span></h1>
+          <p class="exhibit-description">Luminous particles follow<br />an invisible current.</p>
+          <p id="neon-form" class="exhibit-detail">01 / Flow</p>
+        </div>
+      </section>
+      <section id="bloom" class="exhibit-panel" data-gallery-exhibit="bloom" aria-labelledby="bloom-title" hidden>
+        <canvas id="bloom-canvas" aria-hidden="true"></canvas>
+        <div id="bloom-caption" class="exhibit-caption">
+          <p class="eyebrow"><span>004</span> Botanical ASCII</p>
+          <h1 id="bloom-title"><span data-gallery-title>Solar Bloom</span><span class="title-mark" aria-hidden="true">*</span></h1>
+          <p class="exhibit-description">Branching stems and petals<br />in a living garden.</p>
+          <p id="bloom-form" class="exhibit-detail">01 / Bloom</p>
+        </div>
+      </section>
+      <section id="rain" class="exhibit-panel" data-gallery-exhibit="rain" aria-labelledby="rain-title" hidden>
+        <canvas id="rain-canvas" aria-hidden="true"></canvas>
+        <div id="rain-caption" class="exhibit-caption">
+          <p class="eyebrow"><span>005</span> Generative glyphs</p>
+          <h1 id="rain-title"><span data-gallery-title>Data Rain</span><span class="title-mark" aria-hidden="true">*</span></h1>
+          <p class="exhibit-description">Electric streams of characters<br />fall through darkness.</p>
+          <p id="rain-form" class="exhibit-detail">01 / Stream</p>
+        </div>
+      </section>
+      <section id="ember" class="exhibit-panel" data-gallery-exhibit="ember" aria-labelledby="ember-title" hidden>
+        <canvas id="ember-canvas" aria-hidden="true"></canvas>
+        <div id="ember-caption" class="exhibit-caption">
+          <p class="eyebrow"><span>006</span> Particle study</p>
+          <h1 id="ember-title"><span data-gallery-title>Ember</span><span class="title-mark" aria-hidden="true">*</span></h1>
+          <p class="exhibit-description">Sparks and heat rise<br />from a charcoal field.</p>
+          <p id="ember-form" class="exhibit-detail">01 / Ember</p>
+        </div>
+      </section>
+      <section id="prism" class="exhibit-panel" data-gallery-exhibit="prism" aria-labelledby="prism-title" hidden>
+        <canvas id="prism-canvas" aria-hidden="true"></canvas>
+        <div id="prism-caption" class="exhibit-caption">
+          <p class="eyebrow"><span>007</span> Geometric refraction</p>
+          <h1 id="prism-title"><span data-gallery-title>Prism</span><span class="title-mark" aria-hidden="true">*</span></h1>
+          <p class="exhibit-description">Rainbow geometry turns<br />through a spectrum of light.</p>
+          <p id="prism-form" class="exhibit-detail">01 / Prism</p>
         </div>
       </section>
     </main>
@@ -56,9 +111,9 @@
       <div class="view-details">
         <div class="exhibit-status">
           <span class="live-dot" aria-hidden="true"></span>
-          <span>Generative study</span>
+          <span class="status-kind">Generative study</span>
           <span class="status-divider" aria-hidden="true">/</span>
-          <span>Top view</span>
+          <span class="status-view">Top view</span>
         </div>
         <p class="orbit-hint">Drag to orbit · Click for ripples</p>
       </div>

@@ -110,9 +110,6 @@
 
     const label = button.querySelector('.control-label');
     const icon = button.querySelector('.control-icon');
-    const mediumNote = document.querySelector('.medium-note');
-    const statusView = document.querySelector('.exhibit-status span:last-child');
-    const orbitHint = document.querySelector('.orbit-hint');
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     const addWindowListener = window.addEventListener.bind(window);
     const formSurfaces = [
@@ -500,15 +497,6 @@
       }
     }
 
-    function updateChrome(id) {
-      const sculpture = id === 'sculpture';
-      if (mediumNote) mediumNote.textContent = sculpture ? 'Characters become form.' : 'Characters become creatures.';
-      if (statusView) statusView.textContent = sculpture ? 'Perspective' : 'Top view';
-      if (orbitHint) orbitHint.textContent = sculpture
-        ? 'Drag / arrows · M to morph'
-        : 'Drag to orbit · Click for ripples';
-    }
-
     function isInterfaceTarget(target) {
       return target instanceof Element && target.closest('button, a, input, select, textarea, [role="button"], [contenteditable="true"]');
     }
@@ -683,12 +671,10 @@
       get occupiedCells() { return raster ? raster.occupied : 0; }
     };
 
-    updateChrome(gallery.current);
     updateFormLabel();
     updateButton();
     if (isActive()) resize();
     gallery.subscribe((id) => {
-      updateChrome(id);
       if (id === 'sculpture') {
         updateButton();
         updateFormLabel();
