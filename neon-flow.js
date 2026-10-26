@@ -170,8 +170,6 @@
       if (!isActive()) return;
       if (label) label.textContent = paused ? 'Resume motion' : 'Pause motion';
       if (icon) icon.textContent = paused ? '▶' : 'Ⅱ';
-      button.setAttribute('aria-label', paused ? 'Resume motion' : 'Pause motion');
-      button.title = (paused ? 'Resume motion' : 'Pause motion') + ' (Space)';
       if (formLabel) formLabel.textContent = paused ? '01 / Flow · Motion held' : '01 / Flow · Enter to pulse';
     }
 

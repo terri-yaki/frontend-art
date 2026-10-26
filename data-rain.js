@@ -27,6 +27,7 @@
     let width = 0;
     let height = 0;
     let dpr = 1;
+    let bottomShade = null;
     let fontSize = 14;
     let cellW = 14;
     let cellH = 18;
@@ -152,6 +153,9 @@
       }
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
+      ctx.fillStyle = bottomShade;
+      const bottomDepth = Math.min(160, height * 0.36);
+      ctx.fillRect(0, height - bottomDepth, width, bottomDepth);
     }
 
     function resize() {
@@ -171,6 +175,11 @@
       canvas.style.width = width + 'px';
       canvas.style.height = height + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const bottomDepth = Math.min(160, height * 0.36);
+      bottomShade = ctx.createLinearGradient(0, height - bottomDepth, 0, height);
+      bottomShade.addColorStop(0, 'rgba(5, 10, 7, 0)');
+      bottomShade.addColorStop(0.58, 'rgba(5, 10, 7, 0.42)');
+      bottomShade.addColorStop(1, 'rgba(5, 10, 7, 0.88)');
 
       if (!hadStreams) {
         createInitialStreams();

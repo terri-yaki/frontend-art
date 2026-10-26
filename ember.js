@@ -491,7 +491,6 @@
       const text = paused ? 'Resume motion' : 'Pause motion';
       if (label) label.textContent = text;
       if (icon) icon.textContent = paused ? '▶' : 'Ⅱ';
-      button.setAttribute('aria-label', text);
     }
 
     let manuallyPaused = false;
