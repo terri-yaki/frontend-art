@@ -3,6 +3,7 @@
 
   const TAU = Math.PI * 2;
   const ANATOMY_SCALE = 2;
+  const SWIM_SPEED_MULTIPLIER = 2;
   const MAX_FISH = 4;
   const HISTORY_SIZE = 480;
   const HISTORY_STEP = 2;
@@ -209,7 +210,7 @@
       };
       this.state = 'cruise';
       this.stateTimer = 0;
-      this.baseSpeed = 15 + this.temperament.energy * 5;
+      this.baseSpeed = (15 + this.temperament.energy * 5) * SWIM_SPEED_MULTIPLIER;
       this.targetSpeed = this.baseSpeed;
       this.accelerationLimit = 24;
       this.turnLimit = 1.15;
@@ -236,19 +237,19 @@
       const agility = fish.temperament.agility;
       if (fish.state === 'dart') {
         fish.targetSpeed = fish.baseSpeed * (2.35 + energy * 0.20);
-        fish.accelerationLimit = 80 * agility;
+        fish.accelerationLimit = 80 * agility * SWIM_SPEED_MULTIPLIER;
         fish.turnLimit = 1.45 * agility;
       } else if (fish.state === 'brake') {
         fish.targetSpeed = fish.baseSpeed * 0.22;
-        fish.accelerationLimit = 32 * agility;
+        fish.accelerationLimit = 32 * agility * SWIM_SPEED_MULTIPLIER;
         fish.turnLimit = 0.90 * agility;
       } else if (fish.state === 'rest') {
-        fish.targetSpeed = 0.15;
-        fish.accelerationLimit = 18 * agility;
+        fish.targetSpeed = 0.15 * SWIM_SPEED_MULTIPLIER;
+        fish.accelerationLimit = 18 * agility * SWIM_SPEED_MULTIPLIER;
         fish.turnLimit = 0.35 * agility;
       } else {
         fish.targetSpeed = fish.baseSpeed * (fish.state === 'curiosity' ? 0.72 : 1);
-        fish.accelerationLimit = 24 * agility;
+        fish.accelerationLimit = 24 * agility * SWIM_SPEED_MULTIPLIER;
         fish.turnLimit = 1.15 * agility;
       }
     }
