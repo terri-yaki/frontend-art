@@ -1076,6 +1076,8 @@
     }
 
     function drawRipples(dt) {
+      const centerOffsets = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
+      const ringGlyphs = ['=', '-', '~'];
       for (let i = ripples.length - 1; i >= 0; i--) {
         const ripple = ripples[i];
         ripple.age += dt;
@@ -1084,16 +1086,35 @@
           continue;
         }
         const progress = ripple.age / ripple.life;
-        const radius = 8 + progress * Math.min(150, width * 0.18);
-        const alpha = Math.sin(progress * Math.PI) * 0.25 * ripple.strength;
-        const marks = 12 + Math.floor(progress * 10);
-        for (let j = 0; j < marks; j++) {
-          if ((j + Math.floor(ripple.age * 3)) % 3 === 0) continue;
-          const angle = j / marks * TAU;
-          const x = ripple.x + Math.cos(angle) * radius;
-          const y = ripple.y + Math.sin(angle) * radius * 0.58;
-          project(x, y, 0, screenPoint);
-          putWater(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), j % 2 ? '-' : '.', '#9aa8ad', alpha);
+        const fade = 1 - progress;
+        const centerFade = Math.max(0, 1 - progress * 2.4) * ripple.strength;
+        for (let j = 0; j < centerOffsets.length; j++) {
+          const offset = centerOffsets[j];
+          project(ripple.x + offset[0] * cellW, ripple.y + offset[1] * cellH, 0, screenPoint);
+          putWater(
+            Math.round(screenPoint.x / cellW),
+            Math.round(screenPoint.y / cellH),
+            j === 0 ? '*' : '+',
+            '#35677a',
+            centerFade * (j === 0 ? 0.82 : 0.58)
+          );
+        }
+
+        const rings = ripple.strength >= 0.75 ? 3 : 2;
+        const reach = Math.min(210, width * 0.26);
+        for (let ring = 0; ring < rings; ring++) {
+          const radius = 10 + progress * reach - ring * cellW * 3.4;
+          if (radius < cellW) continue;
+          const alpha = fade * ripple.strength * (0.58 - ring * 0.09);
+          const marks = Math.min(64, Math.max(20, Math.floor(radius * 0.55)));
+          for (let j = 0; j < marks; j++) {
+            if ((j + ring + Math.floor(ripple.age * 2)) % 6 === 0) continue;
+            const angle = j / marks * TAU;
+            const x = ripple.x + Math.cos(angle) * radius;
+            const y = ripple.y + Math.sin(angle) * radius * 0.62;
+            project(x, y, 0, screenPoint);
+            putWater(Math.round(screenPoint.x / cellW), Math.round(screenPoint.y / cellH), ringGlyphs[ring], '#4f7d8c', alpha);
+          }
         }
       }
     }
