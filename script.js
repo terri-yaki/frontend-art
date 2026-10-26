@@ -618,16 +618,8 @@
       return count;
     }
 
-    function countReturningFish() {
-      let count = 0;
-      for (let i = 0; i < fishes.length; i++) {
-        if (fishes[i].hasEntered && fullSilhouetteExit(fishes[i]) === fishes[i].spawnEdge) count++;
-      }
-      return count;
-    }
-
     function spawnFromRandomEdge(preferredEdge) {
-      if (countVisibleFish() + countReturningFish() >= Math.min(populationTarget, MAX_FISH)) return false;
+      if (countVisibleFish() >= Math.min(populationTarget, MAX_FISH)) return false;
       const edge = preferredEdge || ['left', 'right', 'top', 'bottom'][Math.floor(random() * 4)];
       const fish = new Fish(fishes.length);
       spawnFish(fish, edge);
@@ -642,21 +634,20 @@
 
     function updateSpawns(dt) {
       const limit = Math.min(populationTarget, MAX_FISH);
-      let reserved = countVisibleHeads() + countReturningFish() + spawnQueue.length;
+      let reserved = countVisibleHeads() + spawnQueue.length;
       while (reserved < limit) {
         scheduleReplacement();
         reserved++;
       }
       let visible = countVisibleFish();
-      const returning = countReturningFish();
-      if (visible + returning === 0) {
+      if (visible === 0) {
         for (let i = 0; i < spawnQueue.length; i++) spawnQueue[i].remaining = 0;
       }
       for (let i = spawnQueue.length - 1; i >= 0; i--) {
         const spawn = spawnQueue[i];
         spawn.remaining = Math.max(0, spawn.remaining - dt);
         if (spawn.remaining > 0) continue;
-        if (visible + returning >= limit) {
+        if (visible >= limit) {
           spawn.remaining = 0;
           continue;
         }
@@ -1310,7 +1301,7 @@
         const exitEdge = fullSilhouetteExit(fish);
         if (exitEdge === null) {
           fish.hasEntered = true;
-        } else if (fish.hasEntered && exitEdge !== fish.spawnEdge) {
+        } else if (fish.hasEntered) {
           fishes.splice(i, 1);
           exitCount++;
           departed = true;
