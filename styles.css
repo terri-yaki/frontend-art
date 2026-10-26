@@ -49,9 +49,9 @@ body[data-exhibit="neon"] {
 body[data-exhibit="bloom"] {
   --ink: #343629;
   --paper: #f5efdc;
-  --muted: #6f705c;
+  --muted: #6b6c58;
   --line: rgb(52 54 41 / 18%);
-  --accent: #b47723;
+  --accent: #8a641d;
   --accent-secondary: #617c46;
 }
 
@@ -81,7 +81,7 @@ body[data-exhibit="prism"] {
   --paper: #eee8f8;
   --muted: #6f657d;
   --line: rgb(48 40 61 / 18%);
-  --accent: #e44f88;
+  --accent: #b63368;
   --accent-secondary: #5c6fd6;
   --spectrum: linear-gradient(90deg, #e44f88 0%, #ef7f45 18%, #f2c94c 34%, #62a66f 51%, #3dc8c0 67%, #5c6fd6 83%, #9a5ac8 100%);
 }
@@ -644,7 +644,7 @@ body:not([data-exhibit="sculpture"]) #morph-toggle {
     display: none;
   }
 
-  .exhibit-caption {
+  #exhibit .exhibit-caption {
     top: 120px;
     bottom: auto;
   }
