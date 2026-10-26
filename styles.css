@@ -679,7 +679,7 @@ body:not([data-exhibit="sculpture"]) #morph-toggle {
     padding-bottom: 10px;
   }
 
-  .exhibit-caption {
+  #exhibit .exhibit-caption {
     top: 112px;
   }
 
