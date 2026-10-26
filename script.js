@@ -10,7 +10,6 @@
   const MAX_RIPPLES = 14;
   const MAX_TILT = Math.PI * 0.32;
   const MIN_ZOOM = 0.80;
-  const MAX_ZOOM = 1.40;
   const BODY_PROFILE = [
     [0.00, 1.18], [0.06, 2.70], [0.16, 4.35], [0.30, 5.55],
     [0.46, 5.10], [0.62, 3.95], [0.78, 2.55], [0.91, 1.38], [1.00, 0.88]
@@ -74,15 +73,12 @@
     let background = null;
     let yaw = 0;
     let tilt = 0;
-    let zoom = 1;
+    const zoom = MIN_ZOOM;
     let targetYaw = 0;
     let targetTilt = 0;
-    let targetZoom = 1;
     let dragging = false;
     let activePointer = null;
     let gestureHadMultiple = false;
-    let pinchDistance = 0;
-    let pinchZoom = 1;
     let dragYawVelocity = 0;
     let dragTiltVelocity = 0;
     let paused = motionQuery.matches;
@@ -112,11 +108,6 @@
     }
 
     function project(x, y, z, out) {
-      if (yaw === 0 && tilt === 0 && zoom === 1) {
-        out.x = x;
-        out.y = y;
-        return out;
-      }
       const centerX = width * 0.5;
       const centerY = height * 0.5;
       const dx = x - centerX;
@@ -157,27 +148,23 @@
       const blend = 1 - Math.exp(-dt * 11);
       const nextYaw = yaw + (targetYaw - yaw) * blend;
       const nextTilt = tilt + (targetTilt - tilt) * blend;
-      const nextZoom = zoom + (targetZoom - zoom) * blend;
-      const changed = Math.abs(nextYaw - yaw) + Math.abs(nextTilt - tilt) + Math.abs(nextZoom - zoom) > 0.000001;
+      const changed = Math.abs(nextYaw - yaw) + Math.abs(nextTilt - tilt) > 0.000001;
       yaw = Math.abs(targetYaw - nextYaw) < 0.00001 ? targetYaw : nextYaw;
       tilt = Math.abs(targetTilt - nextTilt) < 0.00001 ? targetTilt : nextTilt;
-      zoom = Math.abs(targetZoom - nextZoom) < 0.00001 ? targetZoom : nextZoom;
       return changed;
     }
 
     function renderPausedCamera() {
       if (!paused) return;
-      const changed = yaw !== targetYaw || tilt !== targetTilt || zoom !== targetZoom;
+      const changed = yaw !== targetYaw || tilt !== targetTilt;
       yaw = targetYaw;
       tilt = targetTilt;
-      zoom = targetZoom;
       if (changed) draw();
     }
 
     function resetCamera() {
       targetYaw = 0;
       targetTilt = 0;
-      targetZoom = 1;
       dragYawVelocity = 0;
       dragTiltVelocity = 0;
       renderPausedCamera();
@@ -1431,15 +1418,6 @@
       }
       dragYawVelocity = 0;
       dragTiltVelocity = 0;
-      if (pointers.size >= 2) {
-        const ids = Array.from(pointers.keys());
-        const first = pointers.get(ids[0]);
-        const second = pointers.get(ids[1]);
-        pinchDistance = Math.hypot(second.x - first.x, second.y - first.y);
-      } else {
-        pinchDistance = 0;
-      }
-      pinchZoom = targetZoom;
     }
 
     function endGesture(applyInertia) {
@@ -1490,15 +1468,7 @@
       event.preventDefault();
       pointer.x = event.clientX;
       pointer.y = event.clientY;
-      if (pointers.size >= 2) {
-        const ids = Array.from(pointers.keys());
-        const first = pointers.get(ids[0]);
-        const second = pointers.get(ids[1]);
-        const distance = Math.hypot(second.x - first.x, second.y - first.y);
-        if (pinchDistance > 0) targetZoom = clamp(pinchZoom * distance / pinchDistance, MIN_ZOOM, MAX_ZOOM);
-        renderPausedCamera();
-        return;
-      }
+      if (pointers.size >= 2) return;
       if (event.pointerId !== activePointer) return;
       const dx = event.clientX - pointer.startX - (pointer.lastDx || 0);
       const dy = event.clientY - pointer.startY - (pointer.lastDy || 0);
@@ -1554,14 +1524,6 @@
       }
     });
 
-    listenActive('wheel', (event) => {
-      if (isInterfaceTarget(event.target)) return;
-      event.preventDefault();
-      const unit = event.deltaMode === 1 ? 16 : (event.deltaMode === 2 ? height : 1);
-      targetZoom = clamp(targetZoom * Math.exp(-event.deltaY * unit * 0.001), MIN_ZOOM, MAX_ZOOM);
-      renderPausedCamera();
-    }, { passive: false });
-
     listenActive('dblclick', (event) => {
       if (isInterfaceTarget(event.target)) return;
       event.preventDefault();
@@ -1575,8 +1537,6 @@
       else if (event.key === 'ArrowRight') targetYaw += 0.12;
       else if (event.key === 'ArrowUp') targetTilt = clamp(targetTilt - 0.08, 0, MAX_TILT);
       else if (event.key === 'ArrowDown') targetTilt = clamp(targetTilt + 0.08, 0, MAX_TILT);
-      else if (event.key === '+' || event.key === '=') targetZoom = clamp(targetZoom + 0.08, MIN_ZOOM, MAX_ZOOM);
-      else if (event.key === '-' || event.key === '_') targetZoom = clamp(targetZoom - 0.08, MIN_ZOOM, MAX_ZOOM);
       else if (event.key === 'r' || event.key === 'R') resetCamera();
       else handled = false;
       if (handled) {
@@ -1675,7 +1635,7 @@
           dragging,
           targetYaw,
           targetTilt,
-          targetZoom
+          targetZoom: zoom
         };
       }
     };

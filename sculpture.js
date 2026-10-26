@@ -8,9 +8,8 @@
   const SHADE_GLYPHS = ['=', '+', 'o', 'O', '0', '8', '&', '%', '#', '@'];
   const DEFAULT_YAW = -0.48;
   const DEFAULT_PITCH = -0.32;
-  const DEFAULT_ZOOM = 1;
   const MIN_ZOOM = 0.65;
-  const MAX_ZOOM = 1.75;
+  const DEFAULT_ZOOM = MIN_ZOOM;
   const MAX_PITCH = 1.20;
   const MORPH_DURATION = 5.8;
   const HOLD_DURATION = 2.4;
@@ -141,14 +140,10 @@
     let viewport = null;
     let yaw = DEFAULT_YAW;
     let pitch = DEFAULT_PITCH;
-    let zoom = DEFAULT_ZOOM;
     let targetYaw = DEFAULT_YAW;
     let targetPitch = DEFAULT_PITCH;
-    let targetZoom = DEFAULT_ZOOM;
     let dragging = false;
     let activePointer = null;
-    let pinchDistance = 0;
-    let pinchZoom = 1;
     let paused = motionQuery.matches;
     let frame = 0;
     let lastTime = 0;
@@ -276,7 +271,7 @@
       raster.occupied = 0;
       const eased = morphProgress * morphProgress * (3 - 2 * morphProgress);
       const geometry = morphing ? mixForms(morphFrom, morphTo, eased) : formSurfaces[currentForm];
-      const camera = { yaw, pitch, zoom, distance: 6 };
+      const camera = { yaw, pitch, zoom: DEFAULT_ZOOM, distance: 6 };
       const cosYaw = Math.cos(yaw);
       const sinYaw = Math.sin(yaw);
       const cosPitch = Math.cos(pitch);
@@ -376,25 +371,21 @@
       const blend = 1 - Math.exp(-dt * 12);
       const nextYaw = yaw + (targetYaw - yaw) * blend;
       const nextPitch = pitch + (targetPitch - pitch) * blend;
-      const nextZoom = zoom + (targetZoom - zoom) * blend;
       yaw = Math.abs(targetYaw - nextYaw) < 0.00001 ? targetYaw : nextYaw;
       pitch = Math.abs(targetPitch - nextPitch) < 0.00001 ? targetPitch : nextPitch;
-      zoom = Math.abs(targetZoom - nextZoom) < 0.00001 ? targetZoom : nextZoom;
     }
 
     function renderPausedCamera() {
       if (!paused) return;
-      const changed = yaw !== targetYaw || pitch !== targetPitch || zoom !== targetZoom;
+      const changed = yaw !== targetYaw || pitch !== targetPitch;
       yaw = targetYaw;
       pitch = targetPitch;
-      zoom = targetZoom;
       if (changed) draw();
     }
 
     function resetCamera() {
       targetYaw = DEFAULT_YAW;
       targetPitch = DEFAULT_PITCH;
-      targetZoom = DEFAULT_ZOOM;
       renderPausedCamera();
     }
 
@@ -514,8 +505,8 @@
       if (mediumNote) mediumNote.textContent = sculpture ? 'Characters become form.' : 'Characters become creatures.';
       if (statusView) statusView.textContent = sculpture ? 'Perspective' : 'Top view';
       if (orbitHint) orbitHint.textContent = sculpture
-        ? 'Drag / arrows · Wheel / pinch · M to morph'
-        : 'Drag to orbit · Scroll / pinch to zoom';
+        ? 'Drag / arrows · M to morph'
+        : 'Drag to orbit · Click for ripples';
     }
 
     function isInterfaceTarget(target) {
@@ -536,21 +527,11 @@
 
     function rebaseGesture() {
       if (!pointers.has(activePointer)) activePointer = pointers.keys().next().value;
-      if (pointers.size >= 2) {
-        const ids = Array.from(pointers.keys());
-        const first = pointers.get(ids[0]);
-        const second = pointers.get(ids[1]);
-        pinchDistance = Math.hypot(second.x - first.x, second.y - first.y);
-        pinchZoom = targetZoom;
-      } else {
-        pinchDistance = 0;
-      }
     }
 
     function endGesture() {
       dragging = false;
       activePointer = null;
-      pinchDistance = 0;
       document.body.style.cursor = 'grab';
     }
 
@@ -585,15 +566,7 @@
       const dy = event.clientY - pointer.y;
       pointer.x = event.clientX;
       pointer.y = event.clientY;
-      if (pointers.size >= 2) {
-        const ids = Array.from(pointers.keys());
-        const first = pointers.get(ids[0]);
-        const second = pointers.get(ids[1]);
-        const distance = Math.hypot(second.x - first.x, second.y - first.y);
-        if (pinchDistance > 0) targetZoom = clamp(pinchZoom * distance / pinchDistance, MIN_ZOOM, MAX_ZOOM);
-        renderPausedCamera();
-        return;
-      }
+      if (pointers.size >= 2) return;
       if (event.pointerId !== activePointer) return;
       const totalDistance = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
       const threshold = pointer.type === 'touch' ? 8 : 5;
@@ -620,14 +593,6 @@
     listenActive('pointerup', finishPointer);
     listenActive('pointercancel', finishPointer);
 
-    listenActive('wheel', (event) => {
-      if (isInterfaceTarget(event.target)) return;
-      event.preventDefault();
-      const unit = event.deltaMode === 1 ? 16 : (event.deltaMode === 2 ? height : 1);
-      targetZoom = clamp(targetZoom * Math.exp(-event.deltaY * unit * 0.001), MIN_ZOOM, MAX_ZOOM);
-      renderPausedCamera();
-    }, { passive: false });
-
     listenActive('dblclick', (event) => {
       if (isInterfaceTarget(event.target)) return;
       event.preventDefault();
@@ -643,8 +608,6 @@
       else if (event.key === 'ArrowRight') targetYaw += 0.12;
       else if (event.key === 'ArrowUp') targetPitch = clamp(targetPitch - 0.08, -MAX_PITCH, MAX_PITCH);
       else if (event.key === 'ArrowDown') targetPitch = clamp(targetPitch + 0.08, -MAX_PITCH, MAX_PITCH);
-      else if (event.key === '+' || event.key === '=') targetZoom = clamp(targetZoom + 0.08, MIN_ZOOM, MAX_ZOOM);
-      else if (event.key === '-' || event.key === '_') targetZoom = clamp(targetZoom - 0.08, MIN_ZOOM, MAX_ZOOM);
       else if (event.key === 'r' || event.key === 'R') resetCamera();
       else if (event.key === 'm' || event.key === 'M') beginMorph();
       else if (space) setPaused(!paused);
@@ -688,11 +651,11 @@
           yaw,
           pitch,
           tilt: pitch,
-          zoom,
+          zoom: DEFAULT_ZOOM,
           targetYaw,
           targetPitch,
           targetTilt: targetPitch,
-          targetZoom,
+          targetZoom: DEFAULT_ZOOM,
           dragging
         };
       },
